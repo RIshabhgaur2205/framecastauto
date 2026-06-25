@@ -81,6 +81,8 @@ function QueuePage() {
   const qc = useQueryClient();
   const seed = useServerFn(seedDemoVideos);
   const create = useServerFn(createVideo);
+  const genScript = useServerFn(generateScript);
+  const retry = useServerFn(retryVideo);
 
   const { data: videos = [] } = useQuery({
     queryKey: ["videos"],
@@ -96,12 +98,40 @@ function QueuePage() {
       .catch(() => {});
   }, [seed, qc]);
 
+  // Realtime: refresh on any change to this user's videos.
+  useEffect(() => {
+    const channel = supabase
+      .channel("videos-queue")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "videos" },
+        () => qc.invalidateQueries({ queryKey: ["videos"] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   const [view, setView] = useState<View>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = videos.find((v) => v.id === selectedId) ?? null;
 
   const generate = useMutation({
-    mutationFn: () => create({ data: {} }),
+    mutationFn: async () => {
+      const row = await create({ data: {} });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      // Fire-and-forget script generation; status updates flow via realtime.
+      genScript({ data: { video_id: row.id } }).catch(() => {});
+      return row;
+    },
+  });
+
+  const retryMut = useMutation({
+    mutationFn: async (id: string) => {
+      await retry({ data: { video_id: id } });
+      genScript({ data: { video_id: id } }).catch(() => {});
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
   });
 
