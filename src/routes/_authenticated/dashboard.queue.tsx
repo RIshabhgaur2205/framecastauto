@@ -45,11 +45,6 @@ const STATUS_META: Record<
     text: "text-amber-300",
     bg: "bg-amber-500/10 border-amber-500/20",
   },
-    label: "Rendering",
-    dot: "bg-amber-400 animate-pulse",
-    text: "text-amber-300",
-    bg: "bg-amber-500/10 border-amber-500/20",
-  },
   ready: {
     label: "Ready",
     dot: "bg-accent",
