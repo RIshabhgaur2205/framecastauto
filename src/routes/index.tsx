@@ -1,29 +1,52 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Nav } from "@/components/landing/Nav";
+import { Hero } from "@/components/landing/Hero";
+import { HowItWorks } from "@/components/landing/HowItWorks";
+import { Results } from "@/components/landing/Results";
+import { Pricing } from "@/components/landing/Pricing";
+import { Testimonials } from "@/components/landing/Testimonials";
+import { FinalCTA } from "@/components/landing/FinalCTA";
+import { Footer } from "@/components/landing/Footer";
+import heroPoster from "@/assets/hero-poster.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "Framecast — Automated YouTube channels, powered by AI" },
+      {
+        name: "description",
+        content:
+          "Framecast turns your niche into a fully automated YouTube channel. AI writes the script, generates the voiceover and visuals, and publishes on your schedule.",
+      },
+      {
+        property: "og:title",
+        content: "Framecast — Automated YouTube channels, powered by AI",
+      },
+      {
+        property: "og:description",
+        content:
+          "Pick a niche. Framecast handles script, voice, visuals, captions, and publishing — automatically.",
+      },
+      { property: "og:image", content: heroPoster },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: heroPoster },
     ],
   }),
-  component: Index,
+  component: LandingPage,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function LandingPage() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <main className="bg-background text-foreground">
+      <Nav />
+      <Hero />
+      <HowItWorks />
+      <Results />
+      <Pricing />
+      <Testimonials />
+      <FinalCTA />
+      <Footer />
+    </main>
   );
 }
