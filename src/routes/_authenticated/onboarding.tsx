@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPreferences, upsertPreferences } from "@/lib/profile.functions";
@@ -66,7 +66,7 @@ function OnboardingPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Hydrate from existing prefs
-  useMemo(() => {
+  useEffect(() => {
     if (!prefs) return;
     if (prefs.niche) setNiche(prefs.niche);
     if (prefs.niche_custom) setNicheCustom(prefs.niche_custom);
