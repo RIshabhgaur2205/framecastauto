@@ -27,6 +27,12 @@ const STATUS_META: Record<
     text: "text-zinc-300",
     bg: "bg-zinc-500/10 border-zinc-500/20",
   },
+  generating_script: {
+    label: "Writing script",
+    dot: "bg-violet-400 animate-pulse",
+    text: "text-violet-300",
+    bg: "bg-violet-500/10 border-violet-500/20",
+  },
   script_ready: {
     label: "Script ready",
     dot: "bg-sky-400",
@@ -34,6 +40,11 @@ const STATUS_META: Record<
     bg: "bg-sky-500/10 border-sky-500/20",
   },
   rendering: {
+    label: "Rendering",
+    dot: "bg-amber-400 animate-pulse",
+    text: "text-amber-300",
+    bg: "bg-amber-500/10 border-amber-500/20",
+  },
     label: "Rendering",
     dot: "bg-amber-400 animate-pulse",
     text: "text-amber-300",
