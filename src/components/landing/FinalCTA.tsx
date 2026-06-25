@@ -27,7 +27,7 @@ export function FinalCTA() {
           </p>
           <div className="mt-12 flex flex-wrap items-center justify-center gap-8">
             <a
-              href="#"
+              href="/auth"
               className="group inline-flex h-12 items-center bg-accent px-8 text-sm font-medium tracking-wide text-accent-foreground transition-all hover:shadow-[0_0_60px_-6px_var(--color-accent-glow)]"
             >
               Start creating

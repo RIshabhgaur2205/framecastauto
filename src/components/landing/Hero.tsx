@@ -62,7 +62,7 @@ export function Hero() {
           className="mt-10 flex flex-wrap items-center gap-8"
         >
           <a
-            href="#cta"
+            href="/auth"
             className="group inline-flex h-12 items-center bg-accent px-7 text-sm font-medium tracking-wide text-accent-foreground transition-all hover:shadow-[0_0_40px_-6px_var(--color-accent-glow)]"
           >
             Start creating

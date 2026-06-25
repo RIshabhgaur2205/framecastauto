@@ -115,7 +115,7 @@ export function Pricing() {
                 </ul>
 
                 <a
-                  href="#cta"
+                  href="/auth"
                   className={`mt-10 inline-flex h-12 items-center justify-center text-sm font-medium tracking-wide transition-all ${
                     t.highlight
                       ? "bg-accent text-accent-foreground hover:shadow-[0_0_40px_-6px_var(--color-accent-glow)]"
