@@ -16,30 +16,42 @@ export type Database = {
     Tables: {
       channels: {
         Row: {
+          channel_id: string | null
+          channel_name: string | null
+          connected_at: string | null
           created_at: string
           external_id: string | null
           id: string
           name: string | null
+          oauth_refresh_token: string | null
           provider: string
           status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          channel_id?: string | null
+          channel_name?: string | null
+          connected_at?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
           name?: string | null
+          oauth_refresh_token?: string | null
           provider?: string
           status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          channel_id?: string | null
+          channel_name?: string | null
+          connected_at?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
           name?: string | null
+          oauth_refresh_token?: string | null
           provider?: string
           status?: string
           updated_at?: string
@@ -91,32 +103,82 @@ export type Database = {
           },
         ]
       }
+      credit_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          reason: string
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          reason: string
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          reason?: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
+          default_quality_tier: string | null
           display_name: string | null
           email: string | null
           id: string
+          niche: string | null
           onboarded: boolean
+          posting_days: string[]
+          posting_time: string | null
+          timezone: string | null
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          default_quality_tier?: string | null
           display_name?: string | null
           email?: string | null
           id: string
+          niche?: string | null
           onboarded?: boolean
+          posting_days?: string[]
+          posting_time?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          default_quality_tier?: string | null
           display_name?: string | null
           email?: string | null
           id?: string
+          niche?: string | null
           onboarded?: boolean
+          posting_days?: string[]
+          posting_time?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -162,6 +224,74 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      videos: {
+        Row: {
+          caption_style: string | null
+          channel_id: string | null
+          cost_credits: number
+          created_at: string
+          id: string
+          niche: string | null
+          posted_at: string | null
+          quality_tier: string | null
+          scheduled_for: string | null
+          script_text: string | null
+          status: string
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+          video_url: string | null
+          voiceover_url: string | null
+        }
+        Insert: {
+          caption_style?: string | null
+          channel_id?: string | null
+          cost_credits?: number
+          created_at?: string
+          id?: string
+          niche?: string | null
+          posted_at?: string | null
+          quality_tier?: string | null
+          scheduled_for?: string | null
+          script_text?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          video_url?: string | null
+          voiceover_url?: string | null
+        }
+        Update: {
+          caption_style?: string | null
+          channel_id?: string | null
+          cost_credits?: number
+          created_at?: string
+          id?: string
+          niche?: string | null
+          posted_at?: string | null
+          quality_tier?: string | null
+          scheduled_for?: string | null
+          script_text?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          video_url?: string | null
+          voiceover_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
