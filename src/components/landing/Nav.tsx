@@ -40,7 +40,7 @@ export function Nav() {
           ))}
         </nav>
         <a
-          href="#cta"
+          href="/auth"
           className="inline-flex h-9 items-center bg-accent px-4 text-[13px] font-medium text-accent-foreground transition-all hover:bg-accent/90 hover:shadow-[0_0_24px_-4px_var(--color-accent-glow)]"
         >
           Start creating
