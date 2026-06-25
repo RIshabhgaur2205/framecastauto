@@ -11,10 +11,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 const NAV = [
   { to: "/dashboard", label: "Overview", icon: LayoutGrid, exact: true },
-  { to: "/dashboard/channels", label: "Channels", icon: Tv },
-  { to: "/dashboard/queue", label: "Content queue", icon: CalendarClock },
-  { to: "/dashboard/billing", label: "Billing", icon: CreditCard },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard/channels", label: "Channels", icon: Tv, exact: false },
+  { to: "/dashboard/queue", label: "Content queue", icon: CalendarClock, exact: false },
+  { to: "/dashboard/billing", label: "Billing", icon: CreditCard, exact: false },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings, exact: false },
 ] as const;
 
 function DashboardLayout() {
