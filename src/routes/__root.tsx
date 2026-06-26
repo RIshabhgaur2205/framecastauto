@@ -126,7 +126,9 @@ function RootComponent() {
         initialized = true;
         return;
       }
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      // Intentionally exclude USER_UPDATED: getUser() in protected beforeLoad can
+      // emit USER_UPDATED, which would invalidate → re-run beforeLoad → loop.
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
