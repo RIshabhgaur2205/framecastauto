@@ -192,18 +192,24 @@ function QueuePage() {
   }, [videos]);
 
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [genLang, setGenLang] = useState("en");
+  const [genStyle, setGenStyle] = useState("cinematic");
+
   const generate = useMutation({
-    mutationFn: async () => {
-      const row = await create({ data: {} });
+    mutationFn: async (opts: { language: string; video_style: string }) => {
+      const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
       // Fire-and-forget full pipeline; status updates flow via realtime.
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
-    onSuccess: () =>
+    onSuccess: () => {
+      setSettingsOpen(false);
       toast.success("Video queued", {
         description: "Writing script — status updates appear live.",
-      }),
+      });
+    },
     onError: (e) =>
       toast.error("Couldn't queue video", {
         description: e instanceof Error ? e.message : "Unknown error",
