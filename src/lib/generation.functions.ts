@@ -204,7 +204,7 @@ export const generateScript = createServerFn({ method: "POST" })
           .from("videos")
           .update({ status: "generating_captions", error_message: null })
           .eq("id", video.id);
-        const { words, duration } = await transcribeForCaptions(audioBuf!);
+        const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
         const srt = wordsToSrt(words);
         await supabaseAdmin.storage
           .from("video-assets")
