@@ -20,6 +20,8 @@ import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_au
 import { Route as AuthenticatedDashboardQueueRouteImport } from './routes/_authenticated/dashboard.queue'
 import { Route as AuthenticatedDashboardChannelsRouteImport } from './routes/_authenticated/dashboard.channels'
 import { Route as AuthenticatedDashboardBillingRouteImport } from './routes/_authenticated/dashboard.billing'
+import { Route as ApiPublicYoutubeCallbackRouteImport } from './routes/api/public/youtube/callback'
+import { Route as ApiPublicHooksPublishDueRouteImport } from './routes/api/public/hooks/publish-due'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -80,6 +82,18 @@ const AuthenticatedDashboardBillingRoute =
     path: '/billing',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const ApiPublicYoutubeCallbackRoute =
+  ApiPublicYoutubeCallbackRouteImport.update({
+    id: '/api/public/youtube/callback',
+    path: '/api/public/youtube/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksPublishDueRoute =
+  ApiPublicHooksPublishDueRouteImport.update({
+    id: '/api/public/hooks/publish-due',
+    path: '/api/public/hooks/publish-due',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -92,6 +106,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/queue': typeof AuthenticatedDashboardQueueRoute
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/api/public/hooks/publish-due': typeof ApiPublicHooksPublishDueRoute
+  '/api/public/youtube/callback': typeof ApiPublicYoutubeCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -103,6 +119,8 @@ export interface FileRoutesByTo {
   '/dashboard/queue': typeof AuthenticatedDashboardQueueRoute
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/api/public/hooks/publish-due': typeof ApiPublicHooksPublishDueRoute
+  '/api/public/youtube/callback': typeof ApiPublicYoutubeCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -117,6 +135,8 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/queue': typeof AuthenticatedDashboardQueueRoute
   '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/api/public/hooks/publish-due': typeof ApiPublicHooksPublishDueRoute
+  '/api/public/youtube/callback': typeof ApiPublicYoutubeCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +151,8 @@ export interface FileRouteTypes {
     | '/dashboard/queue'
     | '/dashboard/settings'
     | '/dashboard/'
+    | '/api/public/hooks/publish-due'
+    | '/api/public/youtube/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -142,6 +164,8 @@ export interface FileRouteTypes {
     | '/dashboard/queue'
     | '/dashboard/settings'
     | '/dashboard'
+    | '/api/public/hooks/publish-due'
+    | '/api/public/youtube/callback'
   id:
     | '__root__'
     | '/'
@@ -155,12 +179,16 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/queue'
     | '/_authenticated/dashboard/settings'
     | '/_authenticated/dashboard/'
+    | '/api/public/hooks/publish-due'
+    | '/api/public/youtube/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
+  ApiPublicHooksPublishDueRoute: typeof ApiPublicHooksPublishDueRoute
+  ApiPublicYoutubeCallbackRoute: typeof ApiPublicYoutubeCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -242,6 +270,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardBillingRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
     }
+    '/api/public/youtube/callback': {
+      id: '/api/public/youtube/callback'
+      path: '/api/public/youtube/callback'
+      fullPath: '/api/public/youtube/callback'
+      preLoaderRoute: typeof ApiPublicYoutubeCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/publish-due': {
+      id: '/api/public/hooks/publish-due'
+      path: '/api/public/hooks/publish-due'
+      fullPath: '/api/public/hooks/publish-due'
+      preLoaderRoute: typeof ApiPublicHooksPublishDueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -294,6 +336,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
+  ApiPublicHooksPublishDueRoute: ApiPublicHooksPublishDueRoute,
+  ApiPublicYoutubeCallbackRoute: ApiPublicYoutubeCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

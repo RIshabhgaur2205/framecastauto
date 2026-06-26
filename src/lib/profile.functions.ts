@@ -74,7 +74,7 @@ export const getChannels = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("channels")
-      .select("id, provider, name, status, created_at")
+      .select("id, provider, name, channel_name, channel_id, thumbnail_url, status, connected_at, created_at")
       .eq("user_id", context.userId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
