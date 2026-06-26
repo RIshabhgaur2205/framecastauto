@@ -254,14 +254,25 @@ function buildJ2VPayload(opts: {
   if (duration <= 0) throw new Error("Cannot render: duration is 0");
   if (!clips.length) throw new Error("Cannot render: no clips");
 
+  // One clip per scene — JSON2Video plays scenes sequentially, but multiple
+  // video elements inside the same scene render simultaneously (stacked),
+  // which is what caused the "first clip plays, then black screen" bug.
   const per = +(duration / clips.length).toFixed(2);
+  const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
-  const sceneElements = clips.map((c) => ({
-    type: "video",
-    src: c.url,
+  const scenes = clips.map((c, i) => ({
     duration: per,
-    "fit-mode": "cover",
-    muted: true,
+    elements: [
+      {
+        type: "video",
+        src: c.url,
+        duration: per,
+        "fit-mode": "cover",
+        muted: true,
+        loop: true, // loop short Pexels clips so the scene never goes black
+        zoom: zooms[i % zooms.length], // subtle ken-burns motion for interest
+      },
+    ],
   }));
 
   const globalElements: Array<Record<string, unknown>> = [
@@ -286,11 +297,7 @@ function buildJ2VPayload(opts: {
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
     quality: "high",
-    scenes: [
-      {
-        elements: sceneElements,
-      },
-    ],
+    scenes,
     elements: globalElements,
   };
 }
