@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { getChannels } from "@/lib/profile.functions";
 import {
   startYoutubeConnect,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/youtube.functions";
 import { toast } from "sonner";
 import { Youtube, Plus, Link2Off, CheckCircle2 } from "lucide-react";
+import { ConnectionConfirmDialog } from "@/components/channels/ConnectionConfirmDialog";
 
 export const Route = createFileRoute("/_authenticated/dashboard/channels")({
   component: ChannelsPage,
@@ -20,6 +21,13 @@ function ChannelsPage() {
   const start = useServerFn(startYoutubeConnect);
   const disconnect = useServerFn(disconnectChannel);
 
+  const [confirm, setConfirm] = useState<{
+    open: boolean;
+    name: string;
+    channelId: string | null;
+    scope: string;
+  }>({ open: false, name: "", channelId: null, scope: "" });
+
   const { data: channels = [] } = useQuery({
     queryKey: ["channels"],
     queryFn: () => getChannels(),
@@ -30,11 +38,11 @@ function ChannelsPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("yt_connected");
+    const channelId = params.get("yt_channel_id");
+    const scope = params.get("yt_scope") ?? "";
     const err = params.get("yt_error");
     if (connected) {
-      toast.success(`Connected ${connected}`, {
-        description: "Framecast can now publish to this channel.",
-      });
+      setConfirm({ open: true, name: connected, channelId, scope });
       qc.invalidateQueries({ queryKey: ["channels"] });
     }
     if (err) toast.error("YouTube connect failed", { description: err });
@@ -44,6 +52,7 @@ function ChannelsPage() {
       window.history.replaceState({}, "", url.toString());
     }
   }, [qc]);
+
 
   const connectMut = useMutation({
     mutationFn: async () => {
@@ -63,9 +72,19 @@ function ChannelsPage() {
   });
 
   const ytChannels = channels.filter((c) => c.provider === "youtube");
+  const confirmThumb =
+    ytChannels.find((c) => c.channel_id === confirm.channelId)?.thumbnail_url ?? null;
 
   return (
     <div className="mx-auto max-w-5xl">
+      <ConnectionConfirmDialog
+        open={confirm.open}
+        onOpenChange={(o) => setConfirm((c) => ({ ...c, open: o }))}
+        channelName={confirm.name}
+        thumbnailUrl={confirmThumb}
+        scope={confirm.scope}
+      />
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="label-eyebrow">Channels</div>
