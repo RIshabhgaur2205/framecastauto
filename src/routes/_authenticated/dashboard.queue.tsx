@@ -195,9 +195,16 @@ function QueuePage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [genLang, setGenLang] = useState("en");
   const [genStyle, setGenStyle] = useState("cinematic");
+  const [genProduct, setGenProduct] = useState("");
+  const [genRefs, setGenRefs] = useState<RefMediaItem[]>([]);
 
   const generate = useMutation({
-    mutationFn: async (opts: { language: string; video_style: string }) => {
+    mutationFn: async (opts: {
+      language: string;
+      video_style: string;
+      product_description?: string;
+      reference_media?: RefMediaItem[];
+    }) => {
       const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
       // Fire-and-forget full pipeline; status updates flow via realtime.
@@ -206,6 +213,8 @@ function QueuePage() {
     },
     onSuccess: () => {
       setSettingsOpen(false);
+      setGenProduct("");
+      setGenRefs([]);
       toast.success("Video queued", {
         description: "Writing script — status updates appear live.",
       });
