@@ -115,7 +115,7 @@ function ChannelsPage() {
             type="button"
             onClick={() => connectMut.mutate()}
             disabled={connectMut.isPending}
-            className="inline-flex h-11 shrink-0 items-center gap-2 bg-accent px-5 text-sm font-medium text-accent-foreground transition-all hover:shadow-[0_0_30px_-6px_var(--color-accent-glow)] disabled:opacity-60"
+            className="cine-press inline-flex h-11 shrink-0 items-center gap-2 bg-accent px-5 text-sm font-medium text-accent-foreground disabled:opacity-60"
           >
             <Plus className="h-4 w-4" />
             {connectMut.isPending ? "Redirecting…" : "Connect YouTube"}
@@ -125,14 +125,36 @@ function ChannelsPage() {
 
       <div className="mt-12">
         <div className="label-eyebrow">Connected channels</div>
-        {ytChannels.length === 0 ? (
-          <div className="mt-4 border border-dashed border-hairline bg-surface/40 p-10 text-center text-sm text-muted-foreground">
-            No channels connected yet.
+        {isLoading ? (
+          <div className="mt-4">
+            <CineSkeletonRows rows={2} />
+          </div>
+        ) : ytChannels.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState
+              icon={<Youtube className="h-5 w-5" />}
+              title="No channels connected"
+              description="Link your first YouTube channel so Framecast can publish on your schedule."
+              action={
+                <button
+                  type="button"
+                  onClick={() => connectMut.mutate()}
+                  disabled={connectMut.isPending}
+                  className="cine-press inline-flex h-11 items-center gap-2 bg-accent px-5 text-sm font-medium text-accent-foreground disabled:opacity-60"
+                >
+                  <Plus className="h-4 w-4" />
+                  Connect your first channel
+                </button>
+              }
+            />
           </div>
         ) : (
           <ul className="mt-4 divide-y divide-hairline border border-hairline bg-surface">
             {ytChannels.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-4 p-4">
+              <li
+                key={c.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-4 transition-colors hover:bg-background/40"
+              >
                 <div className="flex min-w-0 items-center gap-4">
                   {c.thumbnail_url ? (
                     <img
@@ -146,11 +168,11 @@ function ChannelsPage() {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm text-foreground">
-                      {c.channel_name ?? c.name ?? "Untitled channel"}
-                      <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
+                    <div className="flex items-center gap-2 truncate text-sm text-foreground">
+                      <span className="truncate">{c.channel_name ?? c.name ?? "Untitled channel"}</span>
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-accent" />
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    <div className="mt-1 truncate text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                       YouTube · {c.status}
                       {c.connected_at
                         ? ` · since ${new Date(c.connected_at).toLocaleDateString()}`
@@ -162,16 +184,17 @@ function ChannelsPage() {
                   type="button"
                   onClick={() => disconnectMut.mutate(c.id)}
                   disabled={disconnectMut.isPending}
-                  className="inline-flex items-center gap-1.5 border border-hairline px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground hover:border-rose-500/40 hover:text-rose-300"
+                  className="inline-flex shrink-0 items-center gap-1.5 border border-hairline px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:border-rose-500/40 hover:text-rose-300"
                 >
                   <Link2Off className="h-3 w-3" />
-                  Disconnect
+                  <span className="hidden sm:inline">Disconnect</span>
                 </button>
               </li>
             ))}
           </ul>
         )}
       </div>
+
     </div>
   );
 }
