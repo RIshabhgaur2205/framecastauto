@@ -298,7 +298,7 @@ function QueuePage() {
             action={
               <button
                 type="button"
-                onClick={() => generate.mutate()}
+                onClick={() => setSettingsOpen(true)}
                 disabled={generate.isPending}
                 className="cine-press inline-flex h-11 items-center gap-2 bg-accent px-6 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
