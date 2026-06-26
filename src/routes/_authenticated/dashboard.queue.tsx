@@ -325,6 +325,161 @@ function QueuePage() {
           publishing={publishMut.isPending}
         />
       )}
+
+      {settingsOpen && (
+        <GenerateSettingsModal
+          language={genLang}
+          setLanguage={setGenLang}
+          videoStyle={genStyle}
+          setVideoStyle={setGenStyle}
+          onCancel={() => setSettingsOpen(false)}
+          onConfirm={() =>
+            generate.mutate({ language: genLang, video_style: genStyle })
+          }
+          submitting={generate.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "hi", label: "Hindi" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "pt", label: "Portuguese" },
+  { value: "it", label: "Italian" },
+  { value: "ja", label: "Japanese" },
+  { value: "ar", label: "Arabic" },
+  { value: "zh", label: "Mandarin Chinese" },
+  { value: "ru", label: "Russian" },
+  { value: "ko", label: "Korean" },
+  { value: "tr", label: "Turkish" },
+  { value: "id", label: "Indonesian" },
+];
+
+const STYLE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
+  { value: "cinematic", label: "Cinematic", desc: "Evocative, slow-burn, A24-style trailer voice." },
+  { value: "advertisement", label: "Advertisement", desc: "Punchy ad copy with a single clear CTA." },
+  { value: "documentary", label: "Documentary", desc: "Calm, authoritative narration with specifics." },
+  { value: "vlog", label: "Vlog", desc: "Casual, first-person, talking-to-a-friend." },
+  { value: "educational", label: "Educational", desc: "Clear teacher voice — concept, example, takeaway." },
+  { value: "news", label: "News", desc: "Neutral broadcast tone, lead with the key fact." },
+  { value: "storytime", label: "Storytime", desc: "Narrative arc with setup, twist, resolution." },
+  { value: "explainer", label: "Explainer", desc: "Break a complex idea into 2-3 simple beats." },
+];
+
+function GenerateSettingsModal({
+  language,
+  setLanguage,
+  videoStyle,
+  setVideoStyle,
+  onCancel,
+  onConfirm,
+  submitting,
+}: {
+  language: string;
+  setLanguage: (v: string) => void;
+  videoStyle: string;
+  setVideoStyle: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !submitting && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, submitting]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      onClick={() => !submitting && onCancel()}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg overflow-hidden border border-hairline bg-surface"
+      >
+        <div className="border-b border-hairline p-6">
+          <div className="label-eyebrow">New video</div>
+          <h2 className="display mt-2 text-2xl text-foreground">Set the brief.</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Pick the spoken language and the style your audience expects.
+          </p>
+        </div>
+
+        <div className="space-y-6 p-6">
+          <div>
+            <label className="label-eyebrow mb-2 block">Language</label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              disabled={submitting}
+              className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+            >
+              {LANGUAGE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              The script, voiceover, and burned-in captions will all be in this language.
+            </p>
+          </div>
+
+          <div>
+            <label className="label-eyebrow mb-2 block">Video style</label>
+            <div className="grid grid-cols-2 gap-2">
+              {STYLE_OPTIONS.map((o) => {
+                const active = videoStyle === o.value;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setVideoStyle(o.value)}
+                    disabled={submitting}
+                    className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                      active
+                        ? "border-accent bg-accent/10"
+                        : "border-hairline bg-background hover:border-accent/50"
+                    }`}
+                  >
+                    <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                      {o.label}
+                    </div>
+                    <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      {o.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 border-t border-hairline bg-background/40 p-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="border border-hairline px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={submitting}
+            className="cine-press border border-accent bg-accent px-5 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
+          >
+            {submitting ? "Queuing…" : "Generate video"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
