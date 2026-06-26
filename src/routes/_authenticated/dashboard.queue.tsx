@@ -246,6 +246,8 @@ function QueuePage() {
           onClose={() => setSelectedId(null)}
           onRetry={() => retryMut.mutate(selected.id)}
           retrying={retryMut.isPending}
+          onPublish={() => publishMut.mutate(selected.id)}
+          publishing={publishMut.isPending}
         />
       )}
     </div>
