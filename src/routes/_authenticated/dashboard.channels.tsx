@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import { Youtube, Plus, Link2Off, CheckCircle2 } from "lucide-react";
 import { ConnectionConfirmDialog } from "@/components/channels/ConnectionConfirmDialog";
+import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard/channels")({
   component: ChannelsPage,
