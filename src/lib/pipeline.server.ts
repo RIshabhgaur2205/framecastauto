@@ -206,10 +206,10 @@ function buildShotstackPayload(opts: {
           asset: {
             type: "caption",
             src: srtUrl,
-            font: { color: f.color, size: f.size, weight: f.weight, family: "Montserrat ExtraBold" },
-            background: { color: "#000000", opacity: 0.35, padding: 18, borderRadius: 8 },
-            stroke: { color: "#000000", width: 3 },
+            font: { color: f.color, size: f.size, family: "Montserrat ExtraBold" },
+            background: { color: "#000000", opacity: 0.35, padding: 18 },
           },
+
           start: 0,
           length: duration,
         },
