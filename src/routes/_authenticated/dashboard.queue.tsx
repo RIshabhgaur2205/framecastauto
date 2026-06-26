@@ -132,20 +132,8 @@ function QueuePage() {
     };
   }, [qc]);
 
-  // Poll Shotstack for any rendering videos every 8s.
-  const poll = useServerFn(pollRender);
-  useEffect(() => {
-    const renderingIds = videos.filter((v) => v.status === "rendering").map((v) => v.id);
-    if (renderingIds.length === 0) return;
-    const tick = () => {
-      for (const id of renderingIds) {
-        poll({ data: { video_id: id } }).catch(() => {});
-      }
-    };
-    tick();
-    const t = setInterval(tick, 8000);
-    return () => clearInterval(t);
-  }, [videos, poll]);
+  // Render polling removed (Shotstack disabled).
+
 
   const [view, setView] = useState<View>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
