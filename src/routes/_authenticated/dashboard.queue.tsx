@@ -395,6 +395,10 @@ function GenerateSettingsModal({
   setLanguage,
   videoStyle,
   setVideoStyle,
+  productDescription,
+  setProductDescription,
+  referenceMedia,
+  setReferenceMedia,
   onCancel,
   onConfirm,
   submitting,
@@ -403,30 +407,99 @@ function GenerateSettingsModal({
   setLanguage: (v: string) => void;
   videoStyle: string;
   setVideoStyle: (v: string) => void;
+  productDescription: string;
+  setProductDescription: (v: string) => void;
+  referenceMedia: RefMediaItem[];
+  setReferenceMedia: (v: RefMediaItem[]) => void;
   onCancel: () => void;
   onConfirm: () => void;
   submitting: boolean;
 }) {
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !submitting && onCancel();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel, submitting]);
 
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const remaining = 6 - referenceMedia.length;
+    if (remaining <= 0) {
+      toast.error("Up to 6 reference files");
+      return;
+    }
+    const picked = Array.from(files).slice(0, remaining);
+    setUploading(true);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("Not signed in");
+      const uploaded: RefMediaItem[] = [];
+      for (const f of picked) {
+        if (f.size > 25 * 1024 * 1024) {
+          toast.error(`${f.name}: max 25MB`);
+          continue;
+        }
+        const isImage = f.type.startsWith("image/");
+        const isVideo = f.type.startsWith("video/");
+        if (!isImage && !isVideo) {
+          toast.error(`${f.name}: not an image or video`);
+          continue;
+        }
+        const ext = f.name.split(".").pop()?.toLowerCase() || (isImage ? "jpg" : "mp4");
+        const path = `${uid}/refs/${crypto.randomUUID()}.${ext}`;
+        const up = await supabase.storage
+          .from("video-assets")
+          .upload(path, f, { contentType: f.type, upsert: false });
+        if (up.error) {
+          toast.error(`${f.name}: ${up.error.message}`);
+          continue;
+        }
+        const signed = await supabase.storage
+          .from("video-assets")
+          .createSignedUrl(path, 60 * 60 * 24 * 7);
+        if (!signed.data?.signedUrl) {
+          toast.error(`${f.name}: could not sign URL`);
+          continue;
+        }
+        uploaded.push({
+          url: signed.data.signedUrl,
+          path,
+          type: isImage ? "image" : "video",
+          name: f.name,
+        });
+      }
+      if (uploaded.length) setReferenceMedia([...referenceMedia, ...uploaded]);
+    } catch (e) {
+      toast.error("Upload failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeRef = async (path: string) => {
+    setReferenceMedia(referenceMedia.filter((r) => r.path !== path));
+    supabase.storage.from("video-assets").remove([path]).catch(() => {});
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-      onClick={() => !submitting && onCancel()}
+      onClick={() => !submitting && !uploading && onCancel()}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg overflow-hidden border border-hairline bg-surface"
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto border border-hairline bg-surface"
       >
         <div className="border-b border-hairline p-6">
           <div className="label-eyebrow">New video</div>
           <h2 className="display mt-2 text-2xl text-foreground">Set the brief.</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Pick the spoken language and the style your audience expects.
+            Language, style, and (optionally) a product to feature.
           </p>
         </div>
 
@@ -445,9 +518,6 @@ function GenerateSettingsModal({
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              The script, voiceover, and burned-in captions will all be in this language.
-            </p>
           </div>
 
           <div>
@@ -477,6 +547,79 @@ function GenerateSettingsModal({
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <label className="label-eyebrow mb-2 block">Product / subject brief</label>
+            <textarea
+              value={productDescription}
+              onChange={(e) => setProductDescription(e.target.value)}
+              disabled={submitting}
+              rows={4}
+              maxLength={2000}
+              placeholder="What is the product? Specs, benefits, target customer, USP. The script will be written around this."
+              className="w-full resize-none border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+            />
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Optional. Leave blank for a niche-based topical video.
+            </p>
+          </div>
+
+          <div>
+            <label className="label-eyebrow mb-2 block">
+              Reference photos / videos
+            </label>
+            <label
+              className={`flex cursor-pointer items-center justify-center border border-dashed border-hairline bg-background/40 px-4 py-6 text-center text-[12px] text-muted-foreground transition-colors hover:border-accent hover:text-foreground ${
+                submitting || uploading ? "pointer-events-none opacity-50" : ""
+              }`}
+            >
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                disabled={submitting || uploading || referenceMedia.length >= 6}
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              {uploading
+                ? "Uploading…"
+                : referenceMedia.length >= 6
+                  ? "Maximum 6 files reached"
+                  : "Click to attach product photos or sample videos (max 6, 25MB each)"}
+            </label>
+
+            {referenceMedia.length > 0 && (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {referenceMedia.map((r) => (
+                  <div
+                    key={r.path}
+                    className="group relative aspect-square overflow-hidden border border-hairline bg-background"
+                  >
+                    {r.type === "image" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.url} alt={r.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <video src={r.url} muted className="h-full w-full object-cover" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeRef(r.path)}
+                      disabled={submitting}
+                      className="absolute right-1 top-1 bg-background/80 px-1.5 py-0.5 text-[10px] text-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Your references will be woven into the final video alongside matched stock footage.
+            </p>
           </div>
         </div>
 
