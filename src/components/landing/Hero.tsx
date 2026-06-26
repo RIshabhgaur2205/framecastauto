@@ -64,11 +64,12 @@ export function Hero() {
         >
           <a
             href="/auth"
-            className="group inline-flex h-12 items-center bg-accent px-7 text-sm font-medium tracking-wide text-accent-foreground transition-all hover:shadow-[0_0_40px_-6px_var(--color-accent-glow)]"
+            className="cine-press group inline-flex h-12 items-center bg-accent px-7 text-sm font-medium tracking-wide text-accent-foreground"
           >
             Start creating
             <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
           </a>
+
           <a
             href="#how"
             className="group inline-flex items-center gap-2 text-sm text-foreground/90 transition-colors hover:text-accent"
