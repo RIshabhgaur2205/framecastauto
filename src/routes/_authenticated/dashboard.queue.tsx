@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
@@ -10,8 +10,11 @@ import {
 import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
 import { toast } from "sonner";
+import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
+import { Sparkles } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard/queue")({
   component: QueuePage,
