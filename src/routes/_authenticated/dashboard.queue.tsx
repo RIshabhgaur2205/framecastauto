@@ -178,6 +178,19 @@ function QueuePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
   });
 
+  const publish = useServerFn(publishVideo);
+  const publishMut = useMutation({
+    mutationFn: async (id: string) => publish({ data: { video_id: id } }),
+    onSuccess: () => {
+      toast.success("Published to YouTube", { description: "Uploaded as Private — review in YouTube Studio." });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+    },
+    onError: (e) =>
+      toast.error("Publish failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
+  });
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-6">
