@@ -147,8 +147,8 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
 /* -------------------------------- Shotstack -------------------------------- */
 
 function shotstackBase() {
-  const env = process.env.SHOTSTACK_ENV || "stage";
-  return `https://api.shotstack.io/edit/${env}`;
+  return `https://api.shotstack.io/edit/stage`;
+
 }
 
 export async function submitShotstackRender(args: {
