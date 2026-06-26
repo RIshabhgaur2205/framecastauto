@@ -233,6 +233,8 @@ export const generateScript = createServerFn({ method: "POST" })
 
       // 4) STOCK CLIPS — resume if already sourced. Otherwise, extract a
       //    visual keyword per ~5s of script so each scene matches its line.
+      const productBrief = (video as { product_description?: string | null })
+        .product_description?.trim() || "";
       let stockClips = (video.stock_clips as unknown as
         | Array<{ url: string; preview: string; duration: number }>
         | null) ?? null;
@@ -247,7 +249,7 @@ export const generateScript = createServerFn({ method: "POST" })
         try {
           const raw = await callLLM(
             "You convert a short voiceover script into stock-footage search keywords. Output ONLY a JSON array of strings in ENGLISH (Pexels only indexes English), no prose.",
-            `Script (may be in any language):\n"""${script}"""\n\nVideo style: ${videoStyle}.\n\nReturn exactly ${sceneCount} short Pexels search queries in ENGLISH (2-4 words each) that visually match the script in order and fit a ${videoStyle} aesthetic. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
+            `Script (may be in any language):\n"""${script}"""\n\nVideo style: ${videoStyle}.${productBrief ? `\nProduct / subject brief: """${productBrief}""" — keywords should depict this product, its use, its context, target user, and benefits.` : ""}\n\nReturn exactly ${sceneCount} short Pexels search queries in ENGLISH (2-4 words each) that visually match the script in order and fit a ${videoStyle} aesthetic. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
           );
           const match = raw.match(/\[[\s\S]*\]/);
           if (match) {
@@ -271,7 +273,23 @@ export const generateScript = createServerFn({ method: "POST" })
           .eq("id", video.id);
       }
 
-      // 5) SHOTSTACK RENDER — submit and let the client poll
+      // 4b) REFERENCE MEDIA — sign storage paths so the renderer can fetch them.
+      type RefMedia = { url: string; type: "image" | "video"; path?: string; name?: string };
+      const refRaw = ((video as { reference_media?: unknown }).reference_media ?? []) as RefMedia[];
+      const referenceMedia: Array<{ url: string; type: "image" | "video" }> = [];
+      for (const r of refRaw) {
+        if (!r || (r.type !== "image" && r.type !== "video")) continue;
+        let url = r.url;
+        if (r.path) {
+          const signed = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(r.path, 60 * 60 * 24);
+          if (signed.data?.signedUrl) url = signed.data.signedUrl;
+        }
+        if (url) referenceMedia.push({ url, type: r.type });
+      }
+
+      // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
         .createSignedUrl(srtPath, 60 * 60 * 24);
@@ -284,6 +302,7 @@ export const generateScript = createServerFn({ method: "POST" })
         voiceoverUrl: voiceoverUrl!,
         srtUrl,
         clips: stockClips!,
+        referenceMedia,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
