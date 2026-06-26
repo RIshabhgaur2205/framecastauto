@@ -128,6 +128,8 @@ export const generateScript = createServerFn({ method: "POST" })
         | "premium";
       const captionStyle =
         (video.caption_style ?? prefs?.caption_style ?? "bold") as string;
+      const lang = ((video as { language?: string | null }).language ?? "en").toLowerCase();
+      const videoStyle = ((video as { video_style?: string | null }).video_style ?? "cinematic").toLowerCase();
 
       // 1) SCRIPT — resume if already generated
       let script = video.script_text;
