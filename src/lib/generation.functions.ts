@@ -12,10 +12,15 @@ type Prefs = {
   brand_voice_notes: string | null;
 };
 
-function buildPrompt(video: { title: string | null; niche: string | null; quality_tier: string | null }, prefs: Prefs | null) {
+function buildPrompt(
+  video: { title: string | null; niche: string | null; quality_tier: string | null },
+  prefs: Prefs | null,
+) {
   const niche = video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "general";
   const tier = video.quality_tier ?? prefs?.quality_tier ?? "standard";
-  const voice = prefs?.brand_voice_notes?.trim() || "Direct, confident, no fluff. Conversational but sharp.";
+  const voice =
+    prefs?.brand_voice_notes?.trim() ||
+    "Direct, confident, no fluff. Conversational but sharp.";
   const lengthHint =
     tier === "premium"
       ? "Target ~60-75 seconds of spoken voiceover (around 170-210 words)."
@@ -41,115 +46,220 @@ Constraints:
   };
 }
 
+async function callLLM(system: string, user: string): Promise<string> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing on server");
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+  if (res.status === 429) throw new Error("Rate limit exceeded. Please retry shortly.");
+  if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
+  if (!res.ok) throw new Error(`AI gateway ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const out = json.choices?.[0]?.message?.content?.trim();
+  if (!out) throw new Error("Empty response from AI");
+  return out;
+}
+
 export const generateScript = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => idSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { data: video, error: vErr } = await context.supabase
-      .from("videos")
-      .select("id, title, niche, quality_tier")
-      .eq("id", data.video_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    if (vErr) throw new Error(vErr.message);
-    if (!video) throw new Error("Video not found");
-
-    const { data: prefs } = await context.supabase
-      .from("user_preferences")
-      .select("niche, niche_custom, quality_tier, caption_style, brand_voice_notes")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-
-    // Mark as generating
-    await context.supabase
-      .from("videos")
-      .update({ status: "generating_script", error_message: null })
-      .eq("id", video.id);
-
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) {
-      await context.supabase
-        .from("videos")
-        .update({ status: "failed", error_message: "LOVABLE_API_KEY missing on server" })
-        .eq("id", video.id);
-      throw new Error("LOVABLE_API_KEY missing on server");
-    }
-
-    const { system, user } = buildPrompt(video, prefs as Prefs | null);
-
-    try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Lovable-API-Key": apiKey,
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        }),
-      });
-
-      if (res.status === 429) {
-        await context.supabase
-          .from("videos")
-          .update({ status: "failed", error_message: "Rate limit exceeded. Please retry shortly." })
-          .eq("id", video.id);
-        throw new Error("Rate limit exceeded");
-      }
-      if (res.status === 402) {
-        await context.supabase
-          .from("videos")
-          .update({ status: "failed", error_message: "AI credits exhausted. Add credits to continue." })
-          .eq("id", video.id);
-        throw new Error("AI credits exhausted");
-      }
-      if (!res.ok) {
-        const text = await res.text();
-        await context.supabase
-          .from("videos")
-          .update({ status: "failed", error_message: `AI gateway ${res.status}` })
-          .eq("id", video.id);
-        throw new Error(`AI gateway error ${res.status}: ${text.slice(0, 200)}`);
-      }
-
-      const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const script = json.choices?.[0]?.message?.content?.trim();
-      if (!script) {
-        await context.supabase
-          .from("videos")
-          .update({ status: "failed", error_message: "Empty response from AI" })
-          .eq("id", video.id);
-        throw new Error("Empty response from AI");
-      }
-
-      const { error: uErr } = await context.supabase
-        .from("videos")
-        .update({
-          status: "script_ready",
-          script_text: script,
-          cost_credits: (video.quality_tier === "premium" ? 8 : 4),
-          error_message: null,
-        })
-        .eq("id", video.id);
-      if (uErr) throw new Error(uErr.message);
-
-      return { ok: true, script };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      // Best-effort failure write (in case it wasn't set above)
-      await context.supabase
+    const { supabase, userId } = context;
+    const fail = async (msg: string) => {
+      await supabase
         .from("videos")
         .update({ status: "failed", error_message: msg.slice(0, 500) })
-        .eq("id", video.id)
-        .eq("user_id", context.userId);
+        .eq("id", data.video_id)
+        .eq("user_id", userId);
+    };
+
+    try {
+      const { data: video, error: vErr } = await supabase
+        .from("videos")
+        .select("id, title, niche, quality_tier, caption_style, script_text")
+        .eq("id", data.video_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (vErr) throw new Error(vErr.message);
+      if (!video) throw new Error("Video not found");
+
+      const { data: prefs } = await supabase
+        .from("user_preferences")
+        .select("niche, niche_custom, quality_tier, caption_style, brand_voice_notes")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const tier = (video.quality_tier ?? prefs?.quality_tier ?? "standard") as
+        | "standard"
+        | "premium";
+      const captionStyle =
+        (video.caption_style ?? prefs?.caption_style ?? "bold") as string;
+
+      // 1) SCRIPT
+      let script = video.script_text;
+      if (!script) {
+        await supabase
+          .from("videos")
+          .update({ status: "generating_script", error_message: null })
+          .eq("id", video.id);
+        const { system, user } = buildPrompt(video, prefs as Prefs | null);
+        script = await callLLM(system, user);
+        await supabase
+          .from("videos")
+          .update({ status: "script_ready", script_text: script })
+          .eq("id", video.id);
+      }
+
+      // Niche keyword for stock visuals
+      const nicheKeyword =
+        video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "cinematic";
+
+      // Dynamic-load server-only deps
+      const {
+        synthesizeVoiceover,
+        transcribeForCaptions,
+        wordsToSrt,
+        fetchStockClips,
+        submitShotstackRender,
+      } = await import("./pipeline.server");
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+      // 2) VOICEOVER
+      await supabase
+        .from("videos")
+        .update({ status: "generating_voiceover", error_message: null })
+        .eq("id", video.id);
+      const audioBuf = await synthesizeVoiceover(script);
+      const audioPath = `${userId}/voice/${video.id}.mp3`;
+      const up1 = await supabaseAdmin.storage
+        .from("video-assets")
+        .upload(audioPath, audioBuf, { contentType: "audio/mpeg", upsert: true });
+      if (up1.error) throw new Error(`Voice upload: ${up1.error.message}`);
+      const signedVoice = await supabaseAdmin.storage
+        .from("video-assets")
+        .createSignedUrl(audioPath, 60 * 60 * 24);
+      if (signedVoice.error || !signedVoice.data?.signedUrl)
+        throw new Error("Could not sign voice URL");
+      const voiceoverUrl = signedVoice.data.signedUrl;
+
+      // 3) CAPTIONS (always — store JSON + SRT)
+      await supabase
+        .from("videos")
+        .update({ status: "generating_captions" })
+        .eq("id", video.id);
+      const { words, duration } = await transcribeForCaptions(audioBuf);
+      const srt = wordsToSrt(words);
+      const srtPath = `${userId}/srt/${video.id}.srt`;
+      await supabaseAdmin.storage
+        .from("video-assets")
+        .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
+          contentType: "application/x-subrip",
+          upsert: true,
+        });
+
+      await supabase
+        .from("videos")
+        .update({
+          voiceover_url: voiceoverUrl,
+          captions_json: words,
+          srt_text: srt,
+          duration_seconds: duration,
+        })
+        .eq("id", video.id);
+
+      // PREMIUM: stop here. Captions get uploaded as a native YouTube track at publish time.
+      if (tier === "premium") {
+        // For premium, we still need a finished MP4. The chosen flow is: skip burn-in,
+        // but we still need *something* viewable. We'll mark as ready and surface the
+        // voiceover + captions in the UI; final MP4 produced at publish stage with raw clips.
+        await supabase
+          .from("videos")
+          .update({ status: "ready", error_message: null })
+          .eq("id", video.id);
+        return { ok: true, tier, script };
+      }
+
+      // 4) STOCK CLIPS (Standard tier)
+      await supabase
+        .from("videos")
+        .update({ status: "sourcing_visuals" })
+        .eq("id", video.id);
+      const clips = await fetchStockClips(nicheKeyword, 4);
+      await supabase
+        .from("videos")
+        .update({ stock_clips: clips })
+        .eq("id", video.id);
+
+      // 5) RENDER via Shotstack
+      await supabase
+        .from("videos")
+        .update({ status: "rendering" })
+        .eq("id", video.id);
+      const renderId = await submitShotstackRender({
+        voiceUrl: voiceoverUrl,
+        clips,
+        captions: words,
+        totalDuration: duration || 30,
+        captionStyle,
+      });
+      await supabase
+        .from("videos")
+        .update({ shotstack_render_id: renderId })
+        .eq("id", video.id);
+
+      return { ok: true, tier, renderId };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      await fail(msg);
       throw e;
     }
+  });
+
+// Polled from the queue UI while status === "rendering"
+export const pollRender = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => idSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: video, error } = await supabase
+      .from("videos")
+      .select("id, shotstack_render_id, status")
+      .eq("id", data.video_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!video?.shotstack_render_id) return { status: video?.status ?? "unknown" };
+    if (video.status === "ready" || video.status === "posted") {
+      return { status: video.status };
+    }
+
+    const { fetchShotstackStatus } = await import("./pipeline.server");
+    const r = await fetchShotstackStatus(video.shotstack_render_id);
+
+    if (r.status === "done" && r.url) {
+      await supabase
+        .from("videos")
+        .update({ status: "ready", video_url: r.url, error_message: null })
+        .eq("id", video.id);
+      return { status: "ready", video_url: r.url };
+    }
+    if (r.status === "failed") {
+      await supabase
+        .from("videos")
+        .update({ status: "failed", error_message: "Render failed in Shotstack" })
+        .eq("id", video.id);
+      return { status: "failed" };
+    }
+    return { status: "rendering", remote: r.status };
   });
 
 export const retryVideo = createServerFn({ method: "POST" })
