@@ -8,6 +8,8 @@ import {
   seedDemoVideos,
 } from "@/lib/videos.functions";
 import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
+import { publishVideo } from "@/lib/youtube.functions";
+import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -69,6 +71,12 @@ const STATUS_META: Record<
     dot: "bg-accent",
     text: "text-accent",
     bg: "bg-accent/10 border-accent/30",
+  },
+  publishing: {
+    label: "Publishing",
+    dot: "bg-emerald-400 animate-pulse",
+    text: "text-emerald-300",
+    bg: "bg-emerald-500/10 border-emerald-500/20",
   },
   posted: {
     label: "Posted",
