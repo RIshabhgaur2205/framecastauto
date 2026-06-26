@@ -117,7 +117,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const { data: video, error: vErr } = await supabase
         .from("videos")
         .select(
-          "id, title, niche, quality_tier, caption_style, language, video_style, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
+          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
         )
         .eq("id", data.video_id)
         .eq("user_id", userId)
