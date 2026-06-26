@@ -354,9 +354,10 @@ function ListView({
               </div>
 
             </div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="hidden text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:block">
               {v.quality_tier ?? "—"}
             </div>
+
             <StatusBadge status={v.status} />
           </button>
         </li>
