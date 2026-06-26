@@ -36,6 +36,15 @@ export const createVideo = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const title =
       data.title ?? `Untitled draft · ${new Date().toLocaleString()}`;
+    // Auto-link to the user's first connected YouTube channel, if any.
+    const { data: ch } = await context.supabase
+      .from("channels")
+      .select("id")
+      .eq("user_id", context.userId)
+      .eq("provider", "youtube")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const { data: row, error } = await context.supabase
       .from("videos")
       .insert({
@@ -47,6 +56,7 @@ export const createVideo = createServerFn({ method: "POST" })
         quality_tier: "standard",
         caption_style: "bold",
         cost_credits: 0,
+        channel_id: ch?.id ?? null,
       })
       .select()
       .single();
