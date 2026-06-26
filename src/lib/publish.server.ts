@@ -32,11 +32,19 @@ export async function runPublishForVideo(videoId: string, userId: string) {
 
     const { data: channel, error: cErr } = await supabase
       .from("channels")
-      .select("id, channel_id, oauth_refresh_token")
+      .select("id, channel_id")
       .eq("id", video.channel_id)
       .maybeSingle();
     if (cErr) throw new Error(cErr.message);
-    if (!channel?.oauth_refresh_token)
+    if (!channel) throw new Error("Channel not found");
+
+    const { data: secret, error: sErr } = await supabase
+      .from("channel_secrets")
+      .select("oauth_refresh_token")
+      .eq("channel_id", channel.id)
+      .maybeSingle();
+    if (sErr) throw new Error(sErr.message);
+    if (!secret?.oauth_refresh_token)
       throw new Error("Channel not connected to YouTube");
 
     await supabase.from("videos").update({ status: "publishing", publish_error: null }).eq("id", videoId);
@@ -45,15 +53,15 @@ export async function runPublishForVideo(videoId: string, userId: string) {
       "./youtube.server"
     );
     const { access_token, expires_in } = await refreshAccessToken(
-      channel.oauth_refresh_token,
+      secret.oauth_refresh_token,
     );
     await supabase
-      .from("channels")
+      .from("channel_secrets")
       .update({
         oauth_access_token: access_token,
         oauth_expires_at: new Date(Date.now() + (expires_in - 60) * 1000).toISOString(),
       })
-      .eq("id", channel.id);
+      .eq("channel_id", channel.id);
 
     const title = video.title || `Framecast · ${video.niche ?? "Short"}`;
     const description = (video.script_text ?? "").slice(0, 4500);
