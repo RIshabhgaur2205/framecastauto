@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/dashboard/queue")({
 
 type Video = Awaited<ReturnType<typeof listVideos>>[number];
 type View = "list" | "calendar";
+type RefMediaItem = { url: string; type: "image" | "video"; path: string; name: string };
 
 const STATUS_META: Record<
   string,
