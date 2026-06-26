@@ -24,10 +24,19 @@ export const listVideos = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+const LANGUAGES = [
+  "en", "es", "hi", "fr", "de", "pt", "it", "ja", "ar", "zh", "ru", "ko", "tr", "id",
+] as const;
+const STYLES = [
+  "cinematic", "advertisement", "documentary", "vlog", "educational", "news", "storytime", "explainer",
+] as const;
+
 const createSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   niche: z.string().trim().max(80).optional(),
   scheduled_for: z.string().datetime().nullable().optional(),
+  language: z.enum(LANGUAGES).optional(),
+  video_style: z.enum(STYLES).optional(),
 });
 
 export const createVideo = createServerFn({ method: "POST" })
@@ -57,6 +66,8 @@ export const createVideo = createServerFn({ method: "POST" })
         caption_style: "bold",
         cost_credits: 0,
         channel_id: ch?.id ?? null,
+        language: data.language ?? "en",
+        video_style: data.video_style ?? "cinematic",
       })
       .select()
       .single();
