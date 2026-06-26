@@ -30,7 +30,14 @@ const STYLE_BRIEFS: Record<string, string> = {
 };
 
 function buildPrompt(
-  video: { title: string | null; niche: string | null; quality_tier: string | null; language?: string | null; video_style?: string | null },
+  video: {
+    title: string | null;
+    niche: string | null;
+    quality_tier: string | null;
+    language?: string | null;
+    video_style?: string | null;
+    product_description?: string | null;
+  },
   prefs: Prefs | null,
 ) {
   const niche = video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "general";
@@ -42,6 +49,7 @@ function buildPrompt(
   const langName = LANG_NAMES[lang] ?? "English";
   const style = (video.video_style ?? "cinematic").toLowerCase();
   const styleBrief = STYLE_BRIEFS[style] ?? STYLE_BRIEFS.cinematic;
+  const product = video.product_description?.trim();
   const lengthHint =
     tier === "premium"
       ? "Target ~60-75 seconds of spoken voiceover."
@@ -58,13 +66,13 @@ Niche: ${niche}
 Working title: ${video.title ?? "(no title yet — invent one in the hook)"}
 Brand voice: ${voice}
 Quality tier: ${tier}
-
+${product ? `\nProduct / subject brief (the video MUST be about this — weave in concrete specs, benefits, and naming naturally):\n"""${product}"""\n` : ""}
 ${lengthHint}
 
 Constraints:
-- Open with a short hook that creates a curiosity gap.
+- Open with a short hook that creates a curiosity gap${product ? " about the product" : ""}.
 - One idea per sentence. Match the ${style} style throughout.
-- Land a clear payoff or insight by the end.
+- ${product ? "Reference the product's actual specifications and benefits — do not invent features." : "Land a clear payoff or insight by the end."}
 - No emojis, no hashtags, no music cues, no captions — just the spoken words.`,
   };
 }
@@ -109,7 +117,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const { data: video, error: vErr } = await supabase
         .from("videos")
         .select(
-          "id, title, niche, quality_tier, caption_style, language, video_style, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
+          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
         )
         .eq("id", data.video_id)
         .eq("user_id", userId)
@@ -225,6 +233,8 @@ export const generateScript = createServerFn({ method: "POST" })
 
       // 4) STOCK CLIPS — resume if already sourced. Otherwise, extract a
       //    visual keyword per ~5s of script so each scene matches its line.
+      const productBrief = (video as { product_description?: string | null })
+        .product_description?.trim() || "";
       let stockClips = (video.stock_clips as unknown as
         | Array<{ url: string; preview: string; duration: number }>
         | null) ?? null;
@@ -239,7 +249,7 @@ export const generateScript = createServerFn({ method: "POST" })
         try {
           const raw = await callLLM(
             "You convert a short voiceover script into stock-footage search keywords. Output ONLY a JSON array of strings in ENGLISH (Pexels only indexes English), no prose.",
-            `Script (may be in any language):\n"""${script}"""\n\nVideo style: ${videoStyle}.\n\nReturn exactly ${sceneCount} short Pexels search queries in ENGLISH (2-4 words each) that visually match the script in order and fit a ${videoStyle} aesthetic. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
+            `Script (may be in any language):\n"""${script}"""\n\nVideo style: ${videoStyle}.${productBrief ? `\nProduct / subject brief: """${productBrief}""" — keywords should depict this product, its use, its context, target user, and benefits.` : ""}\n\nReturn exactly ${sceneCount} short Pexels search queries in ENGLISH (2-4 words each) that visually match the script in order and fit a ${videoStyle} aesthetic. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
           );
           const match = raw.match(/\[[\s\S]*\]/);
           if (match) {
@@ -263,7 +273,23 @@ export const generateScript = createServerFn({ method: "POST" })
           .eq("id", video.id);
       }
 
-      // 5) SHOTSTACK RENDER — submit and let the client poll
+      // 4b) REFERENCE MEDIA — sign storage paths so the renderer can fetch them.
+      type RefMedia = { url: string; type: "image" | "video"; path?: string; name?: string };
+      const refRaw = ((video as { reference_media?: unknown }).reference_media ?? []) as RefMedia[];
+      const referenceMedia: Array<{ url: string; type: "image" | "video" }> = [];
+      for (const r of refRaw) {
+        if (!r || (r.type !== "image" && r.type !== "video")) continue;
+        let url = r.url;
+        if (r.path) {
+          const signed = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(r.path, 60 * 60 * 24);
+          if (signed.data?.signedUrl) url = signed.data.signedUrl;
+        }
+        if (url) referenceMedia.push({ url, type: r.type });
+      }
+
+      // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
         .createSignedUrl(srtPath, 60 * 60 * 24);
@@ -276,6 +302,7 @@ export const generateScript = createServerFn({ method: "POST" })
         voiceoverUrl: voiceoverUrl!,
         srtUrl,
         clips: stockClips!,
+        referenceMedia,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,

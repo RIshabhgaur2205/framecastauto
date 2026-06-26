@@ -31,12 +31,26 @@ const STYLES = [
   "cinematic", "advertisement", "documentary", "vlog", "educational", "news", "storytime", "explainer",
 ] as const;
 
+const refMediaSchema = z
+  .array(
+    z.object({
+      url: z.string().url(),
+      type: z.enum(["image", "video"]),
+      path: z.string().max(500).optional(),
+      name: z.string().max(200).optional(),
+    }),
+  )
+  .max(6)
+  .optional();
+
 const createSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   niche: z.string().trim().max(80).optional(),
   scheduled_for: z.string().datetime().nullable().optional(),
   language: z.enum(LANGUAGES).optional(),
   video_style: z.enum(STYLES).optional(),
+  product_description: z.string().trim().max(2000).optional(),
+  reference_media: refMediaSchema,
 });
 
 export const createVideo = createServerFn({ method: "POST" })
@@ -68,6 +82,8 @@ export const createVideo = createServerFn({ method: "POST" })
         channel_id: ch?.id ?? null,
         language: data.language ?? "en",
         video_style: data.video_style ?? "cinematic",
+        product_description: data.product_description?.trim() || null,
+        reference_media: data.reference_media ?? [],
       })
       .select()
       .single();

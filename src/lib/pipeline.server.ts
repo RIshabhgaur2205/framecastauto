@@ -248,46 +248,84 @@ function captionStyleConfig(style: CaptionStyle) {
   }
 }
 
+export type ReferenceMedia = { url: string; type: "image" | "video" };
+
 function buildJ2VPayload(opts: {
   voiceoverUrl: string;
   srtUrl: string | null;
   clips: StockClip[];
+  referenceMedia?: ReferenceMedia[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
 }) {
-  const { voiceoverUrl, srtUrl, clips, duration, captionStyle, burnCaptions } = opts;
+  const { voiceoverUrl, srtUrl, clips, referenceMedia = [], duration, captionStyle, burnCaptions } = opts;
   if (duration <= 0) throw new Error("Cannot render: duration is 0");
-  if (!clips.length) throw new Error("Cannot render: no clips");
+  if (!clips.length && !referenceMedia.length) throw new Error("Cannot render: no clips");
 
-  // One clip per scene — JSON2Video plays scenes sequentially, but multiple
-  // video elements inside the same scene render simultaneously (stacked),
-  // which is what caused the "first clip plays, then black screen" bug.
-  const per = +(duration / clips.length).toFixed(2);
+  // Allocate ~25-40% of the timeline to product reference media (capped at 4s/each),
+  // and the rest to stock B-roll. References open the video (hero shot) and reappear later.
+  const refCount = referenceMedia.length;
+  const stockCount = clips.length;
+  const refDuration = refCount
+    ? Math.min(4, Math.max(2.5, (duration * 0.35) / refCount))
+    : 0;
+  const totalRefTime = +(refDuration * refCount).toFixed(2);
+  const stockTotal = Math.max(duration - totalRefTime, stockCount * 1.5);
+  const stockPer = stockCount ? +(stockTotal / stockCount).toFixed(2) : 0;
   const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
-  const scenes = clips.map((c, i) => ({
-    duration: per,
+  const refScene = (m: ReferenceMedia, i: number) => ({
+    duration: +refDuration.toFixed(2),
+    elements: [
+      {
+        type: m.type === "image" ? "image" : "video",
+        src: m.url,
+        duration: +refDuration.toFixed(2),
+        "fit-mode": "cover",
+        ...(m.type === "video" ? { muted: true, loop: 1 } : {}),
+        zoom: zooms[i % zooms.length],
+      },
+    ],
+  });
+
+  const stockScene = (c: StockClip, i: number) => ({
+    duration: stockPer,
     elements: [
       {
         type: "video",
         src: c.url,
-        duration: per,
+        duration: stockPer,
         "fit-mode": "cover",
         muted: true,
-        loop: 1, // loop short Pexels clips so the scene never goes black
-        zoom: zooms[i % zooms.length], // subtle ken-burns motion for interest
+        loop: 1,
+        zoom: zooms[i % zooms.length],
       },
     ],
-  }));
+  });
+
+  // Open with the first reference (hero), then alternate stock/reference so the
+  // product reappears throughout instead of only at the start.
+  const scenes: Array<ReturnType<typeof refScene> | ReturnType<typeof stockScene>> = [];
+  let refIdx = 0;
+  if (refCount && stockCount) {
+    scenes.push(refScene(referenceMedia[refIdx++], 0));
+    const interval = Math.max(2, Math.ceil(stockCount / Math.max(refCount - 1, 1)));
+    for (let i = 0; i < stockCount; i++) {
+      scenes.push(stockScene(clips[i], scenes.length));
+      if (refIdx < refCount && (i + 1) % interval === 0) {
+        scenes.push(refScene(referenceMedia[refIdx++], scenes.length));
+      }
+    }
+    while (refIdx < refCount) scenes.push(refScene(referenceMedia[refIdx++], scenes.length));
+  } else if (refCount) {
+    referenceMedia.forEach((m, i) => scenes.push(refScene(m, i)));
+  } else {
+    clips.forEach((c, i) => scenes.push(stockScene(c, i)));
+  }
 
   const globalElements: Array<Record<string, unknown>> = [
-    {
-      type: "audio",
-      src: voiceoverUrl,
-      start: 0,
-      duration,
-    },
+    { type: "audio", src: voiceoverUrl, start: 0, duration },
   ];
 
   if (burnCaptions && srtUrl) {
@@ -312,6 +350,7 @@ export async function submitShotstackRender(opts: {
   voiceoverUrl: string;
   srtUrl: string | null;
   clips: StockClip[];
+  referenceMedia?: ReferenceMedia[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
