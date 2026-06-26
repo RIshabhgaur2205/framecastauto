@@ -161,14 +161,6 @@ function QueuePage() {
     },
   });
 
-    mutationFn: async () => {
-      const row = await create({ data: {} });
-      qc.invalidateQueries({ queryKey: ["videos"] });
-      // Fire-and-forget script generation; status updates flow via realtime.
-      genScript({ data: { video_id: row.id } }).catch(() => {});
-      return row;
-    },
-  });
 
   const retryMut = useMutation({
     mutationFn: async (id: string) => {
