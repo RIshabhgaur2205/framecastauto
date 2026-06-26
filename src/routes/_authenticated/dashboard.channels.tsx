@@ -72,9 +72,19 @@ function ChannelsPage() {
   });
 
   const ytChannels = channels.filter((c) => c.provider === "youtube");
+  const confirmThumb =
+    ytChannels.find((c) => c.channel_id === confirm.channelId)?.thumbnail_url ?? null;
 
   return (
     <div className="mx-auto max-w-5xl">
+      <ConnectionConfirmDialog
+        open={confirm.open}
+        onOpenChange={(o) => setConfirm((c) => ({ ...c, open: o }))}
+        channelName={confirm.name}
+        thumbnailUrl={confirmThumb}
+        scope={confirm.scope}
+      />
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="label-eyebrow">Channels</div>
