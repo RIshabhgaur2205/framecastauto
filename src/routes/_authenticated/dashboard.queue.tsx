@@ -7,7 +7,8 @@ import {
   listVideos,
   seedDemoVideos,
 } from "@/lib/videos.functions";
-import { generateScript, retryVideo } from "@/lib/generation.functions";
+import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard/queue")({
