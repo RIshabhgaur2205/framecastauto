@@ -109,7 +109,6 @@ function StatusBadge({ status }: { status: string }) {
 
 function QueuePage() {
   const qc = useQueryClient();
-  const seed = useServerFn(seedDemoVideos);
   const create = useServerFn(createVideo);
   const genScript = useServerFn(generateScript);
   const retry = useServerFn(retryVideo);
@@ -118,16 +117,6 @@ function QueuePage() {
     queryKey: ["videos"],
     queryFn: () => listVideos(),
   });
-
-
-  // Auto-seed demo data once if the user has no videos yet.
-  useEffect(() => {
-    seed()
-      .then((r) => {
-        if (r.seeded > 0) qc.invalidateQueries({ queryKey: ["videos"] });
-      })
-      .catch(() => {});
-  }, [seed, qc]);
 
   // Realtime: refresh on any change to this user's videos.
   useEffect(() => {
