@@ -40,6 +40,24 @@ const STATUS_META: Record<
     text: "text-sky-300",
     bg: "bg-sky-500/10 border-sky-500/20",
   },
+  generating_voiceover: {
+    label: "Voicing",
+    dot: "bg-fuchsia-400 animate-pulse",
+    text: "text-fuchsia-300",
+    bg: "bg-fuchsia-500/10 border-fuchsia-500/20",
+  },
+  generating_captions: {
+    label: "Captioning",
+    dot: "bg-cyan-400 animate-pulse",
+    text: "text-cyan-300",
+    bg: "bg-cyan-500/10 border-cyan-500/20",
+  },
+  sourcing_visuals: {
+    label: "Sourcing visuals",
+    dot: "bg-teal-400 animate-pulse",
+    text: "text-teal-300",
+    bg: "bg-teal-500/10 border-teal-500/20",
+  },
   rendering: {
     label: "Rendering",
     dot: "bg-amber-400 animate-pulse",
