@@ -275,7 +275,7 @@ function buildJ2VPayload(opts: {
         duration: per,
         "fit-mode": "cover",
         muted: true,
-        loop: true, // loop short Pexels clips so the scene never goes black
+        loop: 1, // loop short Pexels clips so the scene never goes black
         zoom: zooms[i % zooms.length], // subtle ken-burns motion for interest
       },
     ],
