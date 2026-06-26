@@ -66,11 +66,11 @@ export function Pricing() {
           </h2>
         </Reveal>
 
-        <div className="mt-20 grid gap-px bg-hairline lg:grid-cols-3">
+        <div className="mt-20 grid gap-px bg-hairline md:grid-cols-2 lg:grid-cols-3">
           {tiers.map((t, i) => (
             <Reveal key={t.name} delay={i * 0.08}>
               <div
-                className={`relative flex h-full flex-col bg-background p-8 lg:p-10 ${
+                className={`cine-hover relative flex h-full flex-col bg-background p-8 lg:p-10 ${
                   t.highlight ? "lg:-my-4 lg:bg-surface" : ""
                 }`}
               >
@@ -89,11 +89,11 @@ export function Pricing() {
                 <p className="mt-3 text-sm text-muted-foreground">{t.description}</p>
 
                 <div className="mt-10">
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
                       From
                     </span>
-                    <span className="font-display text-6xl text-foreground">
+                    <span className="font-display text-5xl text-foreground sm:text-6xl">
                       {t.perVideo}
                     </span>
                     <span className="text-sm text-muted-foreground">/ video</span>
@@ -118,7 +118,7 @@ export function Pricing() {
                   href="/auth"
                   className={`mt-10 inline-flex h-12 items-center justify-center text-sm font-medium tracking-wide transition-all ${
                     t.highlight
-                      ? "bg-accent text-accent-foreground hover:shadow-[0_0_40px_-6px_var(--color-accent-glow)]"
+                      ? "cine-press bg-accent text-accent-foreground"
                       : "border border-hairline text-foreground hover:border-accent hover:text-accent"
                   }`}
                 >
@@ -128,6 +128,7 @@ export function Pricing() {
             </Reveal>
           ))}
         </div>
+
       </div>
     </section>
   );
