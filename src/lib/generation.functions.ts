@@ -238,8 +238,8 @@ export const generateScript = createServerFn({ method: "POST" })
         let queries: string[] = [];
         try {
           const raw = await callLLM(
-            "You convert a short voiceover script into stock-footage search keywords. Output ONLY a JSON array of strings, no prose.",
-            `Script:\n"""${script}"""\n\nReturn exactly ${sceneCount} short Pexels search queries (2-4 words each) that visually match the script in order. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
+            "You convert a short voiceover script into stock-footage search keywords. Output ONLY a JSON array of strings in ENGLISH (Pexels only indexes English), no prose.",
+            `Script (may be in any language):\n"""${script}"""\n\nVideo style: ${videoStyle}.\n\nReturn exactly ${sceneCount} short Pexels search queries in ENGLISH (2-4 words each) that visually match the script in order and fit a ${videoStyle} aesthetic. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
           );
           const match = raw.match(/\[[\s\S]*\]/);
           if (match) {
