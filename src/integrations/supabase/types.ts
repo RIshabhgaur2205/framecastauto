@@ -279,9 +279,11 @@ export type Database = {
           language: string
           niche: string | null
           posted_at: string | null
+          product_description: string | null
           publish_error: string | null
           published_at: string | null
           quality_tier: string | null
+          reference_media: Json
           scheduled_for: string | null
           script_text: string | null
           shotstack_render_id: string | null
@@ -309,9 +311,11 @@ export type Database = {
           language?: string
           niche?: string | null
           posted_at?: string | null
+          product_description?: string | null
           publish_error?: string | null
           published_at?: string | null
           quality_tier?: string | null
+          reference_media?: Json
           scheduled_for?: string | null
           script_text?: string | null
           shotstack_render_id?: string | null
@@ -339,9 +343,11 @@ export type Database = {
           language?: string
           niche?: string | null
           posted_at?: string | null
+          product_description?: string | null
           publish_error?: string | null
           published_at?: string | null
           quality_tier?: string | null
+          reference_media?: Json
           scheduled_for?: string | null
           script_text?: string | null
           shotstack_render_id?: string | null
