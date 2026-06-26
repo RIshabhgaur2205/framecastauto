@@ -476,25 +476,47 @@ function DetailModal({
           </div>
 
           <div>
+            {video.status === "failed" && video.error_message && (
+              <div className="mb-4 border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+                <div className="label-eyebrow mb-1 text-rose-300">Failure</div>
+                {video.error_message}
+              </div>
+            )}
             <div className="label-eyebrow mb-2">Script preview</div>
-            <div className="border border-hairline bg-background p-4 text-sm leading-relaxed text-foreground/85">
-              {video.script_text ?? (
+            <div className="border border-hairline bg-background p-4 text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap">
+              {video.status === "generating_script" ? (
+                <span className="text-muted-foreground">Writing your script…</span>
+              ) : video.script_text ? (
+                video.script_text
+              ) : (
                 <span className="text-muted-foreground">
                   Script hasn't been generated yet.
                 </span>
               )}
             </div>
 
-            {video.video_url && (
-              <a
-                href={video.video_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
-              >
-                Open video
-              </a>
-            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {video.video_url && (
+                <a
+                  href={video.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
+                >
+                  Open video
+                </a>
+              )}
+              {(video.status === "failed" || video.status === "queued") && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={retrying}
+                  className="inline-block border border-hairline px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {retrying ? "Retrying…" : video.status === "failed" ? "Retry" : "Generate script"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
