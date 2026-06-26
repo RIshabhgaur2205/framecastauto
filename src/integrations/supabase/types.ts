@@ -23,9 +23,13 @@ export type Database = {
           external_id: string | null
           id: string
           name: string | null
+          oauth_access_token: string | null
+          oauth_expires_at: string | null
           oauth_refresh_token: string | null
+          oauth_scope: string | null
           provider: string
           status: string
+          thumbnail_url: string | null
           updated_at: string
           user_id: string
         }
@@ -37,9 +41,13 @@ export type Database = {
           external_id?: string | null
           id?: string
           name?: string | null
+          oauth_access_token?: string | null
+          oauth_expires_at?: string | null
           oauth_refresh_token?: string | null
+          oauth_scope?: string | null
           provider?: string
           status?: string
+          thumbnail_url?: string | null
           updated_at?: string
           user_id: string
         }
@@ -51,9 +59,13 @@ export type Database = {
           external_id?: string | null
           id?: string
           name?: string | null
+          oauth_access_token?: string | null
+          oauth_expires_at?: string | null
           oauth_refresh_token?: string | null
+          oauth_scope?: string | null
           provider?: string
           status?: string
+          thumbnail_url?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -237,6 +249,8 @@ export type Database = {
           id: string
           niche: string | null
           posted_at: string | null
+          publish_error: string | null
+          published_at: string | null
           quality_tier: string | null
           scheduled_for: string | null
           script_text: string | null
@@ -250,6 +264,7 @@ export type Database = {
           user_id: string
           video_url: string | null
           voiceover_url: string | null
+          youtube_video_id: string | null
         }
         Insert: {
           caption_style?: string | null
@@ -262,6 +277,8 @@ export type Database = {
           id?: string
           niche?: string | null
           posted_at?: string | null
+          publish_error?: string | null
+          published_at?: string | null
           quality_tier?: string | null
           scheduled_for?: string | null
           script_text?: string | null
@@ -275,6 +292,7 @@ export type Database = {
           user_id: string
           video_url?: string | null
           voiceover_url?: string | null
+          youtube_video_id?: string | null
         }
         Update: {
           caption_style?: string | null
@@ -287,6 +305,8 @@ export type Database = {
           id?: string
           niche?: string | null
           posted_at?: string | null
+          publish_error?: string | null
+          published_at?: string | null
           quality_tier?: string | null
           scheduled_for?: string | null
           script_text?: string | null
@@ -300,6 +320,7 @@ export type Database = {
           user_id?: string
           video_url?: string | null
           voiceover_url?: string | null
+          youtube_video_id?: string | null
         }
         Relationships: [
           {
