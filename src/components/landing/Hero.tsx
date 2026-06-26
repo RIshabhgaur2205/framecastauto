@@ -37,12 +37,13 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="display mt-6 max-w-5xl text-5xl text-foreground sm:text-7xl lg:text-[8.5rem]"
+          className="display mt-6 max-w-5xl text-[2.75rem] leading-[1.02] text-foreground sm:text-6xl md:text-7xl lg:text-[8.5rem]"
         >
           Turn your niche <br />
           into a <span className="text-accent">fully automated</span> <br />
           YouTube channel.
         </motion.h1>
+
 
         <motion.p
           initial={{ opacity: 0, y: 16 }}
