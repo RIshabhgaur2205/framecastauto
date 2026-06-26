@@ -66,7 +66,11 @@ export const Route = createFileRoute("/api/public/youtube/callback")({
             );
           if (upErr) return bounce({ yt_error: upErr.message.slice(0, 80) });
 
-          return bounce({ yt_connected: channel.title });
+          return bounce({
+            yt_connected: channel.title,
+            yt_channel_id: channel.id,
+            yt_scope: tokens.scope ?? "",
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : "callback_failed";
           return bounce({ yt_error: msg.slice(0, 120) });
