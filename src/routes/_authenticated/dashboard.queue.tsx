@@ -271,7 +271,7 @@ function QueuePage() {
             type="button"
             onClick={() => generate.mutate()}
             disabled={generate.isPending}
-            className="border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="cine-press border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
             {generate.isPending ? "Queuing…" : "Generate now"}
           </button>
@@ -279,12 +279,32 @@ function QueuePage() {
       </div>
 
       <div className="mt-10">
-        {view === "list" ? (
+        {isLoading ? (
+          <CineSkeletonRows rows={5} />
+        ) : videos.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Your slate is empty"
+            description="Queue your first AI-generated video — script, voiceover, visuals, and captions, all automated."
+            action={
+              <button
+                type="button"
+                onClick={() => generate.mutate()}
+                disabled={generate.isPending}
+                className="cine-press inline-flex h-11 items-center gap-2 bg-accent px-6 text-sm font-medium text-accent-foreground disabled:opacity-60"
+              >
+                <Sparkles className="h-4 w-4" />
+                {generate.isPending ? "Queuing…" : "Generate your first video"}
+              </button>
+            }
+          />
+        ) : view === "list" ? (
           <ListView videos={videos} onSelect={setSelectedId} />
         ) : (
           <CalendarView videos={videos} onSelect={setSelectedId} />
         )}
       </div>
+
 
       {selected && (
         <DetailModal
