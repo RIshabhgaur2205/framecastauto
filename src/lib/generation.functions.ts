@@ -129,7 +129,6 @@ export const generateScript = createServerFn({ method: "POST" })
         transcribeForCaptions,
         wordsToSrt,
         fetchStockClips,
-        submitShotstackRender,
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -176,7 +175,7 @@ export const generateScript = createServerFn({ method: "POST" })
         })
         .eq("id", video.id);
 
-      // 4) STOCK CLIPS (both tiers — premium also gets a rendered MP4)
+      // 4) STOCK CLIPS
       await supabase
         .from("videos")
         .update({ status: "sourcing_visuals" })
@@ -184,29 +183,10 @@ export const generateScript = createServerFn({ method: "POST" })
       const clips = await fetchStockClips(nicheKeyword, 4);
       await supabase
         .from("videos")
-        .update({ stock_clips: clips })
+        .update({ stock_clips: clips, status: "ready" })
         .eq("id", video.id);
 
-      // 5) RENDER via Shotstack.
-      // Premium: no burn-in (SRT goes up as a native YouTube caption track).
-      // Standard: burn-in captions.
-      await supabase
-        .from("videos")
-        .update({ status: "rendering" })
-        .eq("id", video.id);
-      const renderId = await submitShotstackRender({
-        voiceUrl: voiceoverUrl,
-        clips,
-        captions: tier === "premium" ? [] : words,
-        totalDuration: duration || 30,
-        captionStyle,
-      });
-      await supabase
-        .from("videos")
-        .update({ shotstack_render_id: renderId })
-        .eq("id", video.id);
-
-      return { ok: true, tier, renderId };
+      return { ok: true, tier, captionStyle };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await fail(msg);
@@ -214,43 +194,8 @@ export const generateScript = createServerFn({ method: "POST" })
     }
   });
 
-// Polled from the queue UI while status === "rendering"
-export const pollRender = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => idSchema.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { data: video, error } = await supabase
-      .from("videos")
-      .select("id, shotstack_render_id, status")
-      .eq("id", data.video_id)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!video?.shotstack_render_id) return { status: video?.status ?? "unknown" };
-    if (video.status === "ready" || video.status === "posted") {
-      return { status: video.status };
-    }
 
-    const { fetchShotstackStatus } = await import("./pipeline.server");
-    const r = await fetchShotstackStatus(video.shotstack_render_id);
 
-    if (r.status === "done" && r.url) {
-      await supabase
-        .from("videos")
-        .update({ status: "ready", video_url: r.url, error_message: null })
-        .eq("id", video.id);
-      return { status: "ready", video_url: r.url };
-    }
-    if (r.status === "failed") {
-      await supabase
-        .from("videos")
-        .update({ status: "failed", error_message: "Render failed in Shotstack" })
-        .eq("id", video.id);
-      return { status: "failed" };
-    }
-    return { status: "rendering", remote: r.status };
-  });
 
 export const retryVideo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
