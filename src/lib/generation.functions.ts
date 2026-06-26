@@ -196,43 +196,6 @@ export const generateScript = createServerFn({ method: "POST" })
 
 
 
-// Polled from the queue UI while status === "rendering"
-export const pollRender = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => idSchema.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { data: video, error } = await supabase
-      .from("videos")
-      .select("id, shotstack_render_id, status")
-      .eq("id", data.video_id)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!video?.shotstack_render_id) return { status: video?.status ?? "unknown" };
-    if (video.status === "ready" || video.status === "posted") {
-      return { status: video.status };
-    }
-
-    const { fetchShotstackStatus } = await import("./pipeline.server");
-    const r = await fetchShotstackStatus(video.shotstack_render_id);
-
-    if (r.status === "done" && r.url) {
-      await supabase
-        .from("videos")
-        .update({ status: "ready", video_url: r.url, error_message: null })
-        .eq("id", video.id);
-      return { status: "ready", video_url: r.url };
-    }
-    if (r.status === "failed") {
-      await supabase
-        .from("videos")
-        .update({ status: "failed", error_message: "Render failed in Shotstack" })
-        .eq("id", video.id);
-      return { status: "failed" };
-    }
-    return { status: "rendering", remote: r.status };
-  });
 
 export const retryVideo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
