@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      channel_secrets: {
+        Row: {
+          channel_id: string
+          created_at: string
+          oauth_access_token: string | null
+          oauth_expires_at: string | null
+          oauth_refresh_token: string
+          oauth_scope: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          oauth_access_token?: string | null
+          oauth_expires_at?: string | null
+          oauth_refresh_token: string
+          oauth_scope?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          oauth_access_token?: string | null
+          oauth_expires_at?: string | null
+          oauth_refresh_token?: string
+          oauth_scope?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_secrets_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: true
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       channels: {
         Row: {
           channel_id: string | null
@@ -23,10 +64,6 @@ export type Database = {
           external_id: string | null
           id: string
           name: string | null
-          oauth_access_token: string | null
-          oauth_expires_at: string | null
-          oauth_refresh_token: string | null
-          oauth_scope: string | null
           provider: string
           status: string
           thumbnail_url: string | null
@@ -41,10 +78,6 @@ export type Database = {
           external_id?: string | null
           id?: string
           name?: string | null
-          oauth_access_token?: string | null
-          oauth_expires_at?: string | null
-          oauth_refresh_token?: string | null
-          oauth_scope?: string | null
           provider?: string
           status?: string
           thumbnail_url?: string | null
@@ -59,10 +92,6 @@ export type Database = {
           external_id?: string | null
           id?: string
           name?: string | null
-          oauth_access_token?: string | null
-          oauth_expires_at?: string | null
-          oauth_refresh_token?: string | null
-          oauth_scope?: string | null
           provider?: string
           status?: string
           thumbnail_url?: string | null
