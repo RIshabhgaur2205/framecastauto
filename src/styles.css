@@ -72,13 +72,14 @@
   --secondary: oklch(0.14 0 0);
   --secondary-foreground: oklch(0.96 0 0);
   --muted: oklch(0.12 0 0);
-  --muted-foreground: oklch(0.58 0 0);    /* #8A8A8A */
+  --muted-foreground: oklch(0.72 0 0);    /* brightened for AA contrast on near-black */
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.18 0 0);
-  --input: oklch(0.18 0 0);
+  --border: oklch(0.22 0 0);              /* slightly brighter hairlines for visibility */
+  --input: oklch(0.22 0 0);
   --ring: oklch(0.55 0.26 295);
 }
+
 
 @layer base {
   * {
