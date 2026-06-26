@@ -250,7 +250,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const renderId = await submitShotstackRender({
         voiceoverUrl: voiceoverUrl!,
         srtUrl,
-        clips: stockClips,
+        clips: stockClips!,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
