@@ -130,7 +130,7 @@ export const generateScript = createServerFn({ method: "POST" })
         synthesizeVoiceover,
         transcribeForCaptions,
         wordsToSrt,
-        fetchStockClips,
+        fetchStockClipsForQueries,
         submitShotstackRender,
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
