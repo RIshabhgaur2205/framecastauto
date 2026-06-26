@@ -42,8 +42,14 @@ export async function synthesizeVoiceover(text: string): Promise<ArrayBuffer> {
 
 /* ----------------------------- ElevenLabs STT ----------------------------- */
 
+const ISO_639_3: Record<string, string> = {
+  en: "eng", es: "spa", hi: "hin", fr: "fra", de: "deu", pt: "por", it: "ita",
+  ja: "jpn", ar: "ara", zh: "cmn", ru: "rus", ko: "kor", tr: "tur", id: "ind",
+};
+
 export async function transcribeForCaptions(
   audio: ArrayBuffer,
+  language: string = "en",
 ): Promise<{ words: CaptionWord[]; duration: number }> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
@@ -53,7 +59,7 @@ export async function transcribeForCaptions(
   form.append("model_id", "scribe_v2");
   form.append("diarize", "false");
   form.append("tag_audio_events", "false");
-  form.append("language_code", "eng");
+  form.append("language_code", ISO_639_3[language.toLowerCase()] ?? "eng");
 
   const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
     method: "POST",
