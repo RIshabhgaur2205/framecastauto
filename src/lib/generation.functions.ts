@@ -12,8 +12,25 @@ type Prefs = {
   brand_voice_notes: string | null;
 };
 
+const LANG_NAMES: Record<string, string> = {
+  en: "English", es: "Spanish", hi: "Hindi", fr: "French", de: "German",
+  pt: "Portuguese", it: "Italian", ja: "Japanese", ar: "Arabic", zh: "Mandarin Chinese",
+  ru: "Russian", ko: "Korean", tr: "Turkish", id: "Indonesian",
+};
+
+const STYLE_BRIEFS: Record<string, string> = {
+  cinematic: "Cinematic, evocative, slightly poetic. Visual language. Slow burns into a payoff. Think A24 trailer voiceover.",
+  advertisement: "Punchy ad copy. Benefit-led. Hook, problem, solution, single clear CTA at the end.",
+  documentary: "Calm, authoritative, narrated like a documentary. Use specifics, dates, numbers. No hype words.",
+  vlog: "First-person, casual, talking-to-a-friend. Natural rhythm. Light humor allowed.",
+  educational: "Clear teacher voice. State the concept, give one concrete example, summarize the takeaway.",
+  news: "Neutral broadcast tone. Lead with the most important fact. Short declarative sentences.",
+  storytime: "Narrative arc — setup, twist, resolution. Past tense. Build suspense before the reveal.",
+  explainer: "Curious, accessible. Break a complex idea into 2-3 simple beats. End with a 'so what'.",
+};
+
 function buildPrompt(
-  video: { title: string | null; niche: string | null; quality_tier: string | null },
+  video: { title: string | null; niche: string | null; quality_tier: string | null; language?: string | null; video_style?: string | null },
   prefs: Prefs | null,
 ) {
   const niche = video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "general";
@@ -21,16 +38,22 @@ function buildPrompt(
   const voice =
     prefs?.brand_voice_notes?.trim() ||
     "Direct, confident, no fluff. Conversational but sharp.";
+  const lang = (video.language ?? "en").toLowerCase();
+  const langName = LANG_NAMES[lang] ?? "English";
+  const style = (video.video_style ?? "cinematic").toLowerCase();
+  const styleBrief = STYLE_BRIEFS[style] ?? STYLE_BRIEFS.cinematic;
   const lengthHint =
     tier === "premium"
-      ? "Target ~60-75 seconds of spoken voiceover (around 170-210 words)."
-      : "Target ~35-45 seconds of spoken voiceover (around 100-130 words).";
+      ? "Target ~60-75 seconds of spoken voiceover."
+      : "Target ~35-45 seconds of spoken voiceover.";
 
   return {
     system:
-      "You are a senior short-form video scriptwriter for vertical YouTube Shorts. You write tight, hook-first scripts optimized for retention. Output ONLY the spoken script, no stage directions, no scene labels, no markdown. Start with a punchy hook in the first sentence.",
+      `You are a senior short-form video scriptwriter for vertical YouTube Shorts. You write tight, hook-first scripts optimized for retention. Output ONLY the spoken script in ${langName}, no stage directions, no scene labels, no markdown, no translation, no transliteration. Start with a punchy hook in the first sentence.`,
     user: `Write a short-form vertical video script.
 
+Output language: ${langName} (write the entire script natively in ${langName}; do not include any other language).
+Style: ${style} — ${styleBrief}
 Niche: ${niche}
 Working title: ${video.title ?? "(no title yet — invent one in the hook)"}
 Brand voice: ${voice}
@@ -39,8 +62,8 @@ Quality tier: ${tier}
 ${lengthHint}
 
 Constraints:
-- Open with a 6-12 word hook that creates a curiosity gap.
-- One idea per sentence. Conversational. No "Hey guys" or generic intros.
+- Open with a short hook that creates a curiosity gap.
+- One idea per sentence. Match the ${style} style throughout.
 - Land a clear payoff or insight by the end.
 - No emojis, no hashtags, no music cues, no captions — just the spoken words.`,
   };
