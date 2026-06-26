@@ -6,7 +6,7 @@ import {
   createVideo,
   listVideos,
 } from "@/lib/videos.functions";
-import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
+import { generateScript, retryVideo } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
 import { toast } from "sonner";
 import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
