@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
@@ -10,8 +10,11 @@ import {
 import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
 import { toast } from "sonner";
+import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
+import { Sparkles } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard/queue")({
   component: QueuePage,
@@ -111,10 +114,11 @@ function QueuePage() {
   const genScript = useServerFn(generateScript);
   const retry = useServerFn(retryVideo);
 
-  const { data: videos = [] } = useQuery({
+  const { data: videos = [], isLoading } = useQuery({
     queryKey: ["videos"],
     queryFn: () => listVideos(),
   });
+
 
   // Auto-seed demo data once if the user has no videos yet.
   useEffect(() => {
@@ -159,6 +163,32 @@ function QueuePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = videos.find((v) => v.id === selectedId) ?? null;
 
+  // Toast on key status transitions (ready → "video generated", posted → "video posted").
+  const prevStatusRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    for (const v of videos) {
+      const before = prev[v.id];
+      if (before && before !== v.status) {
+        if (v.status === "ready") {
+          toast.success("Video generated", {
+            description: v.title ?? "Ready to publish.",
+          });
+        } else if (v.status === "posted") {
+          toast.success("Video posted to YouTube", {
+            description: v.title ?? "Live on your channel.",
+          });
+        } else if (v.status === "failed") {
+          toast.error("Generation failed", {
+            description: v.error_message ?? v.title ?? "Open the video to retry.",
+          });
+        }
+      }
+      prev[v.id] = v.status;
+    }
+  }, [videos]);
+
+
   const generate = useMutation({
     mutationFn: async () => {
       const row = await create({ data: {} });
@@ -167,6 +197,14 @@ function QueuePage() {
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
+    onSuccess: () =>
+      toast.success("Video queued", {
+        description: "Writing script — status updates appear live.",
+      }),
+    onError: (e) =>
+      toast.error("Couldn't queue video", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
   });
 
 
@@ -175,8 +213,16 @@ function QueuePage() {
       await retry({ data: { video_id: id } });
       genScript({ data: { video_id: id } }).catch(() => {});
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+    onSuccess: () => {
+      toast.success("Retrying generation");
+      qc.invalidateQueries({ queryKey: ["videos"] });
+    },
+    onError: (e) =>
+      toast.error("Retry failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
   });
+
 
   const publish = useServerFn(publishVideo);
   const publishMut = useMutation({
@@ -225,7 +271,7 @@ function QueuePage() {
             type="button"
             onClick={() => generate.mutate()}
             disabled={generate.isPending}
-            className="border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="cine-press border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
             {generate.isPending ? "Queuing…" : "Generate now"}
           </button>
@@ -233,12 +279,32 @@ function QueuePage() {
       </div>
 
       <div className="mt-10">
-        {view === "list" ? (
+        {isLoading ? (
+          <CineSkeletonRows rows={5} />
+        ) : videos.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Your slate is empty"
+            description="Queue your first AI-generated video — script, voiceover, visuals, and captions, all automated."
+            action={
+              <button
+                type="button"
+                onClick={() => generate.mutate()}
+                disabled={generate.isPending}
+                className="cine-press inline-flex h-11 items-center gap-2 bg-accent px-6 text-sm font-medium text-accent-foreground disabled:opacity-60"
+              >
+                <Sparkles className="h-4 w-4" />
+                {generate.isPending ? "Queuing…" : "Generate your first video"}
+              </button>
+            }
+          />
+        ) : view === "list" ? (
           <ListView videos={videos} onSelect={setSelectedId} />
         ) : (
           <CalendarView videos={videos} onSelect={setSelectedId} />
         )}
       </div>
+
 
       {selected && (
         <DetailModal
@@ -261,13 +327,7 @@ function ListView({
   videos: Video[];
   onSelect: (id: string) => void;
 }) {
-  if (videos.length === 0) {
-    return (
-      <div className="border border-hairline bg-surface p-16 text-center text-sm text-muted-foreground">
-        No videos yet. Hit “Generate now” to queue one.
-      </div>
-    );
-  }
+  if (videos.length === 0) return null;
   return (
     <ul className="divide-y divide-hairline border border-hairline bg-surface">
       {videos.map((v) => (
@@ -275,13 +335,13 @@ function ListView({
           <button
             type="button"
             onClick={() => onSelect(v.id)}
-            className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-6 px-5 py-4 text-left transition-colors hover:bg-background/40"
+            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-background/40 sm:grid-cols-[1fr_auto_auto] sm:gap-6 sm:px-5"
           >
             <div className="min-w-0">
               <div className="truncate text-sm text-foreground">
                 {v.title ?? "Untitled"}
               </div>
-              <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              <div className="mt-1 truncate text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 {v.niche ?? "—"} ·{" "}
                 {v.scheduled_for
                   ? new Date(v.scheduled_for).toLocaleString(undefined, {
@@ -292,10 +352,12 @@ function ListView({
                     })
                   : "Unscheduled"}
               </div>
+
             </div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="hidden text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:block">
               {v.quality_tier ?? "—"}
             </div>
+
             <StatusBadge status={v.status} />
           </button>
         </li>

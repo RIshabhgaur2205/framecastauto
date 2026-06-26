@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getPreferences } from "@/lib/profile.functions";
+import { toast } from "sonner";
+import { CineSkeleton } from "@/components/ui/cine-skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard/billing")({
   component: BillingPage,
 });
 
 function BillingPage() {
-  const { data: prefs } = useQuery({
+  const { data: prefs, isLoading } = useQuery({
     queryKey: ["preferences"],
     queryFn: () => getPreferences(),
   });
@@ -24,18 +26,34 @@ function BillingPage() {
       </h1>
 
       <div className="mt-10 grid gap-px bg-hairline lg:grid-cols-[2fr_1fr]">
-        <div className="bg-surface p-8">
+        <div className="cine-hover bg-surface p-8">
           <div className="label-eyebrow">Current plan</div>
-          <div className="mt-4 flex items-baseline gap-3">
-            <span className="font-display text-6xl text-foreground">{tier.toUpperCase()}</span>
-            <span className="text-sm text-muted-foreground">{price}</span>
-          </div>
-          <div className="mt-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
-            {perVideo}
-          </div>
+          {isLoading ? (
+            <div className="mt-4 space-y-3">
+              <CineSkeleton className="h-12 w-40" />
+              <CineSkeleton className="h-3 w-24" />
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 flex flex-wrap items-baseline gap-3">
+                <span className="font-display text-5xl text-foreground sm:text-6xl">
+                  {tier.toUpperCase()}
+                </span>
+                <span className="text-sm text-muted-foreground">{price}</span>
+              </div>
+              <div className="mt-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                {perVideo}
+              </div>
+            </>
+          )}
           <button
             type="button"
-            className="mt-8 inline-flex h-11 items-center bg-accent px-5 text-sm font-medium text-accent-foreground transition-all hover:shadow-[0_0_30px_-6px_var(--color-accent-glow)]"
+            onClick={() =>
+              toast.success("Upgrade flow coming soon", {
+                description: "We'll email you the moment plans go live.",
+              })
+            }
+            className="cine-press mt-8 inline-flex h-11 items-center bg-accent px-5 text-sm font-medium text-accent-foreground"
           >
             Upgrade plan
           </button>
@@ -51,3 +69,4 @@ function BillingPage() {
     </div>
   );
 }
+

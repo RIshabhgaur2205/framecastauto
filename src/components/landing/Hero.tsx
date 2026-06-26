@@ -37,12 +37,13 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="display mt-6 max-w-5xl text-5xl text-foreground sm:text-7xl lg:text-[8.5rem]"
+          className="display mt-6 max-w-5xl text-[2.75rem] leading-[1.02] text-foreground sm:text-6xl md:text-7xl lg:text-[8.5rem]"
         >
           Turn your niche <br />
           into a <span className="text-accent">fully automated</span> <br />
           YouTube channel.
         </motion.h1>
+
 
         <motion.p
           initial={{ opacity: 0, y: 16 }}
@@ -63,11 +64,12 @@ export function Hero() {
         >
           <a
             href="/auth"
-            className="group inline-flex h-12 items-center bg-accent px-7 text-sm font-medium tracking-wide text-accent-foreground transition-all hover:shadow-[0_0_40px_-6px_var(--color-accent-glow)]"
+            className="cine-press group inline-flex h-12 items-center bg-accent px-7 text-sm font-medium tracking-wide text-accent-foreground"
           >
             Start creating
             <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
           </a>
+
           <a
             href="#how"
             className="group inline-flex items-center gap-2 text-sm text-foreground/90 transition-colors hover:text-accent"

@@ -72,13 +72,14 @@
   --secondary: oklch(0.14 0 0);
   --secondary-foreground: oklch(0.96 0 0);
   --muted: oklch(0.12 0 0);
-  --muted-foreground: oklch(0.58 0 0);    /* #8A8A8A */
+  --muted-foreground: oklch(0.72 0 0);    /* brightened for AA contrast on near-black */
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.18 0 0);
-  --input: oklch(0.18 0 0);
+  --border: oklch(0.22 0 0);              /* slightly brighter hairlines for visibility */
+  --input: oklch(0.22 0 0);
   --ring: oklch(0.55 0.26 295);
 }
+
 
 @layer base {
   * {
@@ -127,3 +128,44 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>");
   }
 }
+
+/* Cinematic micro-interactions */
+@utility cine-hover {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease, background-color 200ms ease, box-shadow 200ms ease;
+  &:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-hairline));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 12%, transparent),
+      0 16px 40px -24px color-mix(in oklab, var(--color-accent-glow) 60%, transparent);
+  }
+}
+
+@utility cine-press {
+  transition: transform 120ms ease, box-shadow 200ms ease, opacity 200ms ease;
+  &:hover {
+    box-shadow: 0 0 32px -8px var(--color-accent-glow);
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@utility skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-foreground) 6%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
