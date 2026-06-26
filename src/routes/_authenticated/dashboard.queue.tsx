@@ -111,10 +111,11 @@ function QueuePage() {
   const genScript = useServerFn(generateScript);
   const retry = useServerFn(retryVideo);
 
-  const { data: videos = [] } = useQuery({
+  const { data: videos = [], isLoading } = useQuery({
     queryKey: ["videos"],
     queryFn: () => listVideos(),
   });
+
 
   // Auto-seed demo data once if the user has no videos yet.
   useEffect(() => {
