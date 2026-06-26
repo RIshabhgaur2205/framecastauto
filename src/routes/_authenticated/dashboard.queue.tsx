@@ -327,13 +327,7 @@ function ListView({
   videos: Video[];
   onSelect: (id: string) => void;
 }) {
-  if (videos.length === 0) {
-    return (
-      <div className="border border-hairline bg-surface p-16 text-center text-sm text-muted-foreground">
-        No videos yet. Hit “Generate now” to queue one.
-      </div>
-    );
-  }
+  if (videos.length === 0) return null;
   return (
     <ul className="divide-y divide-hairline border border-hairline bg-surface">
       {videos.map((v) => (
@@ -341,13 +335,13 @@ function ListView({
           <button
             type="button"
             onClick={() => onSelect(v.id)}
-            className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-6 px-5 py-4 text-left transition-colors hover:bg-background/40"
+            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-background/40 sm:grid-cols-[1fr_auto_auto] sm:gap-6 sm:px-5"
           >
             <div className="min-w-0">
               <div className="truncate text-sm text-foreground">
                 {v.title ?? "Untitled"}
               </div>
-              <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              <div className="mt-1 truncate text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 {v.niche ?? "—"} ·{" "}
                 {v.scheduled_for
                   ? new Date(v.scheduled_for).toLocaleString(undefined, {
@@ -358,6 +352,7 @@ function ListView({
                     })
                   : "Unscheduled"}
               </div>
+
             </div>
             <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
               {v.quality_tier ?? "—"}
