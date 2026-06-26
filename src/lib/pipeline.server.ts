@@ -144,27 +144,66 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
   return clips;
 }
 
-/* -------------------------------- Shotstack ------------------------------- */
+/* -------------------------------- JSON2Video ------------------------------ */
 
-const SHOTSTACK_BASE = "https://api.shotstack.io/edit/stage";
+const J2V_BASE = "https://api.json2video.com/v2/movies";
 
 type CaptionStyle = "bold" | "minimal" | "neon" | "subtle";
 
-function captionFontConfig(style: CaptionStyle) {
+function captionStyleConfig(style: CaptionStyle) {
+  // JSON2Video subtitles settings
   switch (style) {
     case "neon":
-      return { color: "#A78BFA", size: 64, weight: 800 };
+      return {
+        style: "classic",
+        "font-family": "Montserrat",
+        "font-size": 64,
+        "word-color": "#A78BFA",
+        "line-color": "#FFFFFF",
+        "shadow-color": "#000000",
+        "shadow-offset": 4,
+        position: "bottom-center",
+        "all-caps": true,
+      };
     case "minimal":
-      return { color: "#FFFFFF", size: 48, weight: 500 };
+      return {
+        style: "classic",
+        "font-family": "Inter",
+        "font-size": 48,
+        "word-color": "#FFFFFF",
+        "line-color": "#FFFFFF",
+        "shadow-color": "#000000",
+        "shadow-offset": 2,
+        position: "bottom-center",
+      };
     case "subtle":
-      return { color: "#E5E7EB", size: 44, weight: 500 };
+      return {
+        style: "classic",
+        "font-family": "Inter",
+        "font-size": 44,
+        "word-color": "#E5E7EB",
+        "line-color": "#E5E7EB",
+        "shadow-color": "#000000",
+        "shadow-offset": 2,
+        position: "bottom-center",
+      };
     case "bold":
     default:
-      return { color: "#FFFFFF", size: 68, weight: 800 };
+      return {
+        style: "classic",
+        "font-family": "Montserrat",
+        "font-size": 68,
+        "word-color": "#FFFFFF",
+        "line-color": "#FFFFFF",
+        "shadow-color": "#000000",
+        "shadow-offset": 4,
+        position: "bottom-center",
+        "all-caps": true,
+      };
   }
 }
 
-function buildShotstackPayload(opts: {
+function buildJ2VPayload(opts: {
   voiceoverUrl: string;
   srtUrl: string | null;
   clips: StockClip[];
@@ -176,57 +215,44 @@ function buildShotstackPayload(opts: {
   if (duration <= 0) throw new Error("Cannot render: duration is 0");
   if (!clips.length) throw new Error("Cannot render: no clips");
 
-  const per = duration / clips.length;
-  const videoClips = clips.map((c, i) => ({
-    asset: { type: "video", src: c.url },
-    start: +(i * per).toFixed(2),
-    length: +per.toFixed(2),
-    fit: "cover",
-    scale: 1,
+  const per = +(duration / clips.length).toFixed(2);
+
+  const sceneElements = clips.map((c) => ({
+    type: "video",
+    src: c.url,
+    duration: per,
+    "fit-mode": "cover",
+    muted: true,
   }));
 
-  const tracks: Array<{ clips: unknown[] }> = [
-    { clips: videoClips },
+  const globalElements: Array<Record<string, unknown>> = [
     {
-      clips: [
-        {
-          asset: { type: "audio", src: voiceoverUrl },
-          start: 0,
-          length: duration,
-        },
-      ],
+      type: "audio",
+      src: voiceoverUrl,
+      start: 0,
+      duration,
     },
   ];
 
   if (burnCaptions && srtUrl) {
-    const f = captionFontConfig(captionStyle);
-    tracks.unshift({
-      clips: [
-        {
-          asset: {
-            type: "caption",
-            src: srtUrl,
-            font: { color: f.color, size: f.size, family: "Montserrat ExtraBold" },
-            background: { color: "#000000", opacity: 0.35, padding: 18 },
-          },
-
-          start: 0,
-          length: duration,
-        },
-      ],
+    globalElements.push({
+      type: "subtitles",
+      captions: srtUrl,
+      settings: captionStyleConfig(captionStyle),
     });
   }
 
   return {
-    timeline: {
-      background: "#000000",
-      tracks,
-    },
-    output: {
-      format: "mp4",
-      size: { width: VIDEO_WIDTH, height: VIDEO_HEIGHT },
-      fps: 30,
-    },
+    resolution: "custom",
+    width: VIDEO_WIDTH,
+    height: VIDEO_HEIGHT,
+    quality: "high",
+    scenes: [
+      {
+        elements: sceneElements,
+      },
+    ],
+    elements: globalElements,
   };
 }
 
@@ -238,41 +264,48 @@ export async function submitShotstackRender(opts: {
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
 }): Promise<string> {
-  const apiKey = process.env.SHOTSTACK_API_KEY;
-  if (!apiKey) throw new Error("SHOTSTACK_API_KEY not configured");
-  const payload = buildShotstackPayload(opts);
-  const res = await fetch(`${SHOTSTACK_BASE}/render`, {
+  const apiKey = process.env.JSON2VIDEO_API_KEY;
+  if (!apiKey) throw new Error("JSON2VIDEO_API_KEY not configured");
+  const payload = buildJ2VPayload(opts);
+  const res = await fetch(J2V_BASE, {
     method: "POST",
     headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`Shotstack submit ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(`JSON2Video submit ${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
-  const json = (await res.json()) as { response?: { id?: string } };
-  const id = json.response?.id;
-  if (!id) throw new Error("Shotstack returned no render id");
-  return id;
+  const json = (await res.json()) as { success?: boolean; project?: string; message?: string };
+  if (!json.success || !json.project) {
+    throw new Error(`JSON2Video submit failed: ${json.message ?? "no project id"}`);
+  }
+  return json.project;
 }
 
 export async function getShotstackStatus(
   renderId: string,
 ): Promise<{ status: string; url: string | null; error: string | null }> {
-  const apiKey = process.env.SHOTSTACK_API_KEY;
-  if (!apiKey) throw new Error("SHOTSTACK_API_KEY not configured");
-  const res = await fetch(`${SHOTSTACK_BASE}/render/${renderId}`, {
+  const apiKey = process.env.JSON2VIDEO_API_KEY;
+  if (!apiKey) throw new Error("JSON2VIDEO_API_KEY not configured");
+  const res = await fetch(`${J2V_BASE}?project=${encodeURIComponent(renderId)}`, {
     headers: { "x-api-key": apiKey },
   });
   if (!res.ok) {
-    throw new Error(`Shotstack status ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    throw new Error(`JSON2Video status ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
   const json = (await res.json()) as {
-    response?: { status?: string; url?: string; error?: string };
+    success?: boolean;
+    movie?: { status?: string; url?: string; message?: string };
   };
+  const raw = json.movie?.status ?? "unknown";
+  // Normalize to shotstack-ish states the caller expects: done | failed | <other>
+  let status = raw;
+  if (raw === "done") status = "done";
+  else if (raw === "error" || raw === "failed") status = "failed";
   return {
-    status: json.response?.status ?? "unknown",
-    url: json.response?.url ?? null,
-    error: json.response?.error ?? null,
+    status,
+    url: json.movie?.url ?? null,
+    error: status === "failed" ? json.movie?.message ?? "Render failed" : null,
   };
 }
 
