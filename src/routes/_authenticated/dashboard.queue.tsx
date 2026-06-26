@@ -5,7 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
   listVideos,
-  seedDemoVideos,
 } from "@/lib/videos.functions";
 import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
