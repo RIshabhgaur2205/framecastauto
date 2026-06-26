@@ -451,11 +451,15 @@ function DetailModal({
   onClose,
   onRetry,
   retrying,
+  onPublish,
+  publishing,
 }: {
   video: Video;
   onClose: () => void;
   onRetry: () => void;
   retrying: boolean;
+  onPublish: () => void;
+  publishing: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -559,9 +563,29 @@ function DetailModal({
                   href={video.video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
+                  className="inline-block border border-hairline px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-foreground hover:border-accent hover:text-accent"
                 >
-                  Open video
+                  Open render
+                </a>
+              )}
+              {video.status === "ready" && video.channel_id && !video.youtube_video_id && (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={publishing}
+                  className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {publishing ? "Publishing…" : "Publish to YouTube"}
+                </button>
+              )}
+              {video.youtube_video_id && (
+                <a
+                  href={`https://youtube.com/watch?v=${video.youtube_video_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block border border-emerald-500/40 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  View on YouTube
                 </a>
               )}
               {(video.status === "failed" || video.status === "queued") && (
