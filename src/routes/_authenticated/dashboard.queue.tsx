@@ -391,9 +391,13 @@ function CalendarView({
 function DetailModal({
   video,
   onClose,
+  onRetry,
+  retrying,
 }: {
   video: Video;
   onClose: () => void;
+  onRetry: () => void;
+  retrying: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
