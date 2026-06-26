@@ -342,9 +342,18 @@ function QueuePage() {
           setLanguage={setGenLang}
           videoStyle={genStyle}
           setVideoStyle={setGenStyle}
+          productDescription={genProduct}
+          setProductDescription={setGenProduct}
+          referenceMedia={genRefs}
+          setReferenceMedia={setGenRefs}
           onCancel={() => setSettingsOpen(false)}
           onConfirm={() =>
-            generate.mutate({ language: genLang, video_style: genStyle })
+            generate.mutate({
+              language: genLang,
+              video_style: genStyle,
+              product_description: genProduct.trim() || undefined,
+              reference_media: genRefs.length ? genRefs : undefined,
+            })
           }
           submitting={generate.isPending}
         />
