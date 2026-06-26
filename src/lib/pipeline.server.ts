@@ -117,7 +117,7 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
   if (!apiKey) throw new Error("PEXELS_API_KEY not configured");
 
   const res = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count * 2}&orientation=portrait&size=medium`,
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${Math.max(count * 3, 12)}&orientation=portrait&size=medium`,
     { headers: { Authorization: apiKey } },
   );
   if (!res.ok) {
@@ -131,7 +131,9 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
     }>;
   };
   const clips: StockClip[] = [];
-  for (const v of json.videos ?? []) {
+  // Prefer longer clips (>=3s feels like a real shot, not a blip).
+  const candidates = (json.videos ?? []).slice().sort((a, b) => b.duration - a.duration);
+  for (const v of candidates) {
     const file =
       v.video_files.find((f) => f.height >= 1280 && f.height <= 1920 && f.quality === "hd") ??
       v.video_files.find((f) => f.height >= 720) ??
@@ -142,6 +144,43 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
   }
   if (!clips.length) throw new Error(`No Pexels clips for "${query}"`);
   return clips;
+}
+
+/** One matching clip per query (deduplicated). Skips queries that fail; backfills from a broad query. */
+export async function fetchStockClipsForQueries(
+  queries: string[],
+  fallbackQuery: string,
+): Promise<StockClip[]> {
+  const out: StockClip[] = [];
+  const seen = new Set<string>();
+  for (const q of queries) {
+    try {
+      const clips = await fetchStockClips(q, 4);
+      const pick = clips.find((c) => !seen.has(c.url)) ?? null;
+      if (pick) {
+        out.push(pick);
+        seen.add(pick.url);
+      }
+    } catch {
+      // single-query failure: ignore, backfill below
+    }
+  }
+  const target = Math.max(queries.length, 6);
+  if (out.length < target) {
+    try {
+      const extras = await fetchStockClips(fallbackQuery, target + 4);
+      for (const c of extras) {
+        if (seen.has(c.url)) continue;
+        out.push(c);
+        seen.add(c.url);
+        if (out.length >= target) break;
+      }
+    } catch {
+      // ignore; caller errors if zero
+    }
+  }
+  if (!out.length) throw new Error("No stock clips available for script");
+  return out;
 }
 
 /* -------------------------------- JSON2Video ------------------------------ */
@@ -215,14 +254,25 @@ function buildJ2VPayload(opts: {
   if (duration <= 0) throw new Error("Cannot render: duration is 0");
   if (!clips.length) throw new Error("Cannot render: no clips");
 
+  // One clip per scene — JSON2Video plays scenes sequentially, but multiple
+  // video elements inside the same scene render simultaneously (stacked),
+  // which is what caused the "first clip plays, then black screen" bug.
   const per = +(duration / clips.length).toFixed(2);
+  const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
-  const sceneElements = clips.map((c) => ({
-    type: "video",
-    src: c.url,
+  const scenes = clips.map((c, i) => ({
     duration: per,
-    "fit-mode": "cover",
-    muted: true,
+    elements: [
+      {
+        type: "video",
+        src: c.url,
+        duration: per,
+        "fit-mode": "cover",
+        muted: true,
+        loop: true, // loop short Pexels clips so the scene never goes black
+        zoom: zooms[i % zooms.length], // subtle ken-burns motion for interest
+      },
+    ],
   }));
 
   const globalElements: Array<Record<string, unknown>> = [
@@ -247,11 +297,7 @@ function buildJ2VPayload(opts: {
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
     quality: "high",
-    scenes: [
-      {
-        elements: sceneElements,
-      },
-    ],
+    scenes,
     elements: globalElements,
   };
 }

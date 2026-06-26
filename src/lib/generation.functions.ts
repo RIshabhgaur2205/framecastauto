@@ -130,7 +130,7 @@ export const generateScript = createServerFn({ method: "POST" })
         synthesizeVoiceover,
         transcribeForCaptions,
         wordsToSrt,
-        fetchStockClips,
+        fetchStockClipsForQueries,
         submitShotstackRender,
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -198,7 +198,8 @@ export const generateScript = createServerFn({ method: "POST" })
           .eq("id", video.id);
       }
 
-      // 4) STOCK CLIPS — resume if already sourced
+      // 4) STOCK CLIPS — resume if already sourced. Otherwise, extract a
+      //    visual keyword per ~5s of script so each scene matches its line.
       let stockClips = (video.stock_clips as unknown as
         | Array<{ url: string; preview: string; duration: number }>
         | null) ?? null;
@@ -207,7 +208,30 @@ export const generateScript = createServerFn({ method: "POST" })
           .from("videos")
           .update({ status: "sourcing_visuals", error_message: null })
           .eq("id", video.id);
-        stockClips = await fetchStockClips(nicheKeyword, 4);
+
+        const sceneCount = Math.max(4, Math.min(10, Math.round((durationSec || 30) / 5)));
+        let queries: string[] = [];
+        try {
+          const raw = await callLLM(
+            "You convert a short voiceover script into stock-footage search keywords. Output ONLY a JSON array of strings, no prose.",
+            `Script:\n"""${script}"""\n\nReturn exactly ${sceneCount} short Pexels search queries (2-4 words each) that visually match the script in order. Prefer concrete, filmable subjects (people, places, objects, actions) over abstract concepts. No hashtags, no quotes inside strings.`,
+          );
+          const match = raw.match(/\[[\s\S]*\]/);
+          if (match) {
+            const arr = JSON.parse(match[0]) as unknown;
+            if (Array.isArray(arr)) {
+              queries = arr
+                .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+                .map((s) => s.trim())
+                .slice(0, sceneCount);
+            }
+          }
+        } catch {
+          // fall through to niche-only
+        }
+        if (!queries.length) queries = Array(sceneCount).fill(nicheKeyword);
+
+        stockClips = await fetchStockClipsForQueries(queries, nicheKeyword);
         await supabase
           .from("videos")
           .update({ stock_clips: stockClips })
@@ -226,7 +250,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const renderId = await submitShotstackRender({
         voiceoverUrl: voiceoverUrl!,
         srtUrl,
-        clips: stockClips,
+        clips: stockClips!,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
