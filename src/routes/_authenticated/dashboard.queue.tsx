@@ -163,6 +163,32 @@ function QueuePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = videos.find((v) => v.id === selectedId) ?? null;
 
+  // Toast on key status transitions (ready → "video generated", posted → "video posted").
+  const prevStatusRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    for (const v of videos) {
+      const before = prev[v.id];
+      if (before && before !== v.status) {
+        if (v.status === "ready") {
+          toast.success("Video generated", {
+            description: v.title ?? "Ready to publish.",
+          });
+        } else if (v.status === "posted") {
+          toast.success("Video posted to YouTube", {
+            description: v.title ?? "Live on your channel.",
+          });
+        } else if (v.status === "failed") {
+          toast.error("Generation failed", {
+            description: v.error_message ?? v.title ?? "Open the video to retry.",
+          });
+        }
+      }
+      prev[v.id] = v.status;
+    }
+  }, [videos]);
+
+
   const generate = useMutation({
     mutationFn: async () => {
       const row = await create({ data: {} });
