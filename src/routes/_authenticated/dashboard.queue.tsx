@@ -185,7 +185,12 @@ function QueuePage() {
       </div>
 
       {selected && (
-        <DetailModal video={selected} onClose={() => setSelectedId(null)} />
+        <DetailModal
+          video={selected}
+          onClose={() => setSelectedId(null)}
+          onRetry={() => retryMut.mutate(selected.id)}
+          retrying={retryMut.isPending}
+        />
       )}
     </div>
   );
