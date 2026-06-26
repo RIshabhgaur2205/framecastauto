@@ -168,6 +168,14 @@ function QueuePage() {
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
+    onSuccess: () =>
+      toast.success("Video queued", {
+        description: "Writing script — status updates appear live.",
+      }),
+    onError: (e) =>
+      toast.error("Couldn't queue video", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
   });
 
 
@@ -176,8 +184,16 @@ function QueuePage() {
       await retry({ data: { video_id: id } });
       genScript({ data: { video_id: id } }).catch(() => {});
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+    onSuccess: () => {
+      toast.success("Retrying generation");
+      qc.invalidateQueries({ queryKey: ["videos"] });
+    },
+    onError: (e) =>
+      toast.error("Retry failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
   });
+
 
   const publish = useServerFn(publishVideo);
   const publishMut = useMutation({
