@@ -7,6 +7,8 @@ import {
   listVideos,
   seedDemoVideos,
 } from "@/lib/videos.functions";
+import { generateScript, retryVideo } from "@/lib/generation.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard/queue")({
   component: QueuePage,
@@ -24,6 +26,12 @@ const STATUS_META: Record<
     dot: "bg-zinc-400",
     text: "text-zinc-300",
     bg: "bg-zinc-500/10 border-zinc-500/20",
+  },
+  generating_script: {
+    label: "Writing script",
+    dot: "bg-violet-400 animate-pulse",
+    text: "text-violet-300",
+    bg: "bg-violet-500/10 border-violet-500/20",
   },
   script_ready: {
     label: "Script ready",
@@ -73,6 +81,8 @@ function QueuePage() {
   const qc = useQueryClient();
   const seed = useServerFn(seedDemoVideos);
   const create = useServerFn(createVideo);
+  const genScript = useServerFn(generateScript);
+  const retry = useServerFn(retryVideo);
 
   const { data: videos = [] } = useQuery({
     queryKey: ["videos"],
@@ -88,12 +98,40 @@ function QueuePage() {
       .catch(() => {});
   }, [seed, qc]);
 
+  // Realtime: refresh on any change to this user's videos.
+  useEffect(() => {
+    const channel = supabase
+      .channel("videos-queue")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "videos" },
+        () => qc.invalidateQueries({ queryKey: ["videos"] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   const [view, setView] = useState<View>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = videos.find((v) => v.id === selectedId) ?? null;
 
   const generate = useMutation({
-    mutationFn: () => create({ data: {} }),
+    mutationFn: async () => {
+      const row = await create({ data: {} });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      // Fire-and-forget script generation; status updates flow via realtime.
+      genScript({ data: { video_id: row.id } }).catch(() => {});
+      return row;
+    },
+  });
+
+  const retryMut = useMutation({
+    mutationFn: async (id: string) => {
+      await retry({ data: { video_id: id } });
+      genScript({ data: { video_id: id } }).catch(() => {});
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
   });
 
@@ -147,7 +185,12 @@ function QueuePage() {
       </div>
 
       {selected && (
-        <DetailModal video={selected} onClose={() => setSelectedId(null)} />
+        <DetailModal
+          video={selected}
+          onClose={() => setSelectedId(null)}
+          onRetry={() => retryMut.mutate(selected.id)}
+          retrying={retryMut.isPending}
+        />
       )}
     </div>
   );
@@ -348,9 +391,13 @@ function CalendarView({
 function DetailModal({
   video,
   onClose,
+  onRetry,
+  retrying,
 }: {
   video: Video;
   onClose: () => void;
+  onRetry: () => void;
+  retrying: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -429,25 +476,47 @@ function DetailModal({
           </div>
 
           <div>
+            {video.status === "failed" && video.error_message && (
+              <div className="mb-4 border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+                <div className="label-eyebrow mb-1 text-rose-300">Failure</div>
+                {video.error_message}
+              </div>
+            )}
             <div className="label-eyebrow mb-2">Script preview</div>
-            <div className="border border-hairline bg-background p-4 text-sm leading-relaxed text-foreground/85">
-              {video.script_text ?? (
+            <div className="border border-hairline bg-background p-4 text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap">
+              {video.status === "generating_script" ? (
+                <span className="text-muted-foreground">Writing your script…</span>
+              ) : video.script_text ? (
+                video.script_text
+              ) : (
                 <span className="text-muted-foreground">
                   Script hasn't been generated yet.
                 </span>
               )}
             </div>
 
-            {video.video_url && (
-              <a
-                href={video.video_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
-              >
-                Open video
-              </a>
-            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {video.video_url && (
+                <a
+                  href={video.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
+                >
+                  Open video
+                </a>
+              )}
+              {(video.status === "failed" || video.status === "queued") && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={retrying}
+                  className="inline-block border border-hairline px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {retrying ? "Retrying…" : video.status === "failed" ? "Retry" : "Generate script"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -16,7 +16,7 @@ export const listVideos = createServerFn({ method: "GET" })
     const { data, error } = await context.supabase
       .from("videos")
       .select(
-        "id, title, status, niche, script_text, voiceover_url, video_url, thumbnail_url, caption_style, quality_tier, scheduled_for, posted_at, cost_credits, created_at",
+        "id, title, status, niche, script_text, voiceover_url, video_url, thumbnail_url, caption_style, quality_tier, scheduled_for, posted_at, cost_credits, error_message, created_at",
       )
       .eq("user_id", context.userId)
       .order("scheduled_for", { ascending: true, nullsFirst: false });

@@ -231,6 +231,7 @@ export type Database = {
           channel_id: string | null
           cost_credits: number
           created_at: string
+          error_message: string | null
           id: string
           niche: string | null
           posted_at: string | null
@@ -250,6 +251,7 @@ export type Database = {
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          error_message?: string | null
           id?: string
           niche?: string | null
           posted_at?: string | null
@@ -269,6 +271,7 @@ export type Database = {
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          error_message?: string | null
           id?: string
           niche?: string | null
           posted_at?: string | null
