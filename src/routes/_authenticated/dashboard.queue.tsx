@@ -7,7 +7,8 @@ import {
   listVideos,
   seedDemoVideos,
 } from "@/lib/videos.functions";
-import { generateScript, retryVideo } from "@/lib/generation.functions";
+import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard/queue")({
@@ -38,6 +39,24 @@ const STATUS_META: Record<
     dot: "bg-sky-400",
     text: "text-sky-300",
     bg: "bg-sky-500/10 border-sky-500/20",
+  },
+  generating_voiceover: {
+    label: "Voicing",
+    dot: "bg-fuchsia-400 animate-pulse",
+    text: "text-fuchsia-300",
+    bg: "bg-fuchsia-500/10 border-fuchsia-500/20",
+  },
+  generating_captions: {
+    label: "Captioning",
+    dot: "bg-cyan-400 animate-pulse",
+    text: "text-cyan-300",
+    bg: "bg-cyan-500/10 border-cyan-500/20",
+  },
+  sourcing_visuals: {
+    label: "Sourcing visuals",
+    dot: "bg-teal-400 animate-pulse",
+    text: "text-teal-300",
+    bg: "bg-teal-500/10 border-teal-500/20",
   },
   rendering: {
     label: "Rendering",
@@ -113,6 +132,21 @@ function QueuePage() {
     };
   }, [qc]);
 
+  // Poll Shotstack for any rendering videos every 8s.
+  const poll = useServerFn(pollRender);
+  useEffect(() => {
+    const renderingIds = videos.filter((v) => v.status === "rendering").map((v) => v.id);
+    if (renderingIds.length === 0) return;
+    const tick = () => {
+      for (const id of renderingIds) {
+        poll({ data: { video_id: id } }).catch(() => {});
+      }
+    };
+    tick();
+    const t = setInterval(tick, 8000);
+    return () => clearInterval(t);
+  }, [videos, poll]);
+
   const [view, setView] = useState<View>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = videos.find((v) => v.id === selectedId) ?? null;
@@ -121,11 +155,12 @@ function QueuePage() {
     mutationFn: async () => {
       const row = await create({ data: {} });
       qc.invalidateQueries({ queryKey: ["videos"] });
-      // Fire-and-forget script generation; status updates flow via realtime.
+      // Fire-and-forget full pipeline; status updates flow via realtime.
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
   });
+
 
   const retryMut = useMutation({
     mutationFn: async (id: string) => {
