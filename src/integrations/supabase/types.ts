@@ -276,6 +276,7 @@ export type Database = {
           duration_seconds: number | null
           error_message: string | null
           id: string
+          language: string
           niche: string | null
           posted_at: string | null
           publish_error: string | null
@@ -291,6 +292,7 @@ export type Database = {
           title: string | null
           updated_at: string
           user_id: string
+          video_style: string
           video_url: string | null
           voiceover_url: string | null
           youtube_video_id: string | null
@@ -304,6 +306,7 @@ export type Database = {
           duration_seconds?: number | null
           error_message?: string | null
           id?: string
+          language?: string
           niche?: string | null
           posted_at?: string | null
           publish_error?: string | null
@@ -319,6 +322,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id: string
+          video_style?: string
           video_url?: string | null
           voiceover_url?: string | null
           youtube_video_id?: string | null
@@ -332,6 +336,7 @@ export type Database = {
           duration_seconds?: number | null
           error_message?: string | null
           id?: string
+          language?: string
           niche?: string | null
           posted_at?: string | null
           publish_error?: string | null
@@ -347,6 +352,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id?: string
+          video_style?: string
           video_url?: string | null
           voiceover_url?: string | null
           youtube_video_id?: string | null
