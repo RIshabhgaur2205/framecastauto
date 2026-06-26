@@ -30,7 +30,14 @@ const STYLE_BRIEFS: Record<string, string> = {
 };
 
 function buildPrompt(
-  video: { title: string | null; niche: string | null; quality_tier: string | null; language?: string | null; video_style?: string | null },
+  video: {
+    title: string | null;
+    niche: string | null;
+    quality_tier: string | null;
+    language?: string | null;
+    video_style?: string | null;
+    product_description?: string | null;
+  },
   prefs: Prefs | null,
 ) {
   const niche = video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "general";
@@ -42,6 +49,7 @@ function buildPrompt(
   const langName = LANG_NAMES[lang] ?? "English";
   const style = (video.video_style ?? "cinematic").toLowerCase();
   const styleBrief = STYLE_BRIEFS[style] ?? STYLE_BRIEFS.cinematic;
+  const product = video.product_description?.trim();
   const lengthHint =
     tier === "premium"
       ? "Target ~60-75 seconds of spoken voiceover."
@@ -58,13 +66,13 @@ Niche: ${niche}
 Working title: ${video.title ?? "(no title yet — invent one in the hook)"}
 Brand voice: ${voice}
 Quality tier: ${tier}
-
+${product ? `\nProduct / subject brief (the video MUST be about this — weave in concrete specs, benefits, and naming naturally):\n"""${product}"""\n` : ""}
 ${lengthHint}
 
 Constraints:
-- Open with a short hook that creates a curiosity gap.
+- Open with a short hook that creates a curiosity gap${product ? " about the product" : ""}.
 - One idea per sentence. Match the ${style} style throughout.
-- Land a clear payoff or insight by the end.
+- ${product ? "Reference the product's actual specifications and benefits — do not invent features." : "Land a clear payoff or insight by the end."}
 - No emojis, no hashtags, no music cues, no captions — just the spoken words.`,
   };
 }
