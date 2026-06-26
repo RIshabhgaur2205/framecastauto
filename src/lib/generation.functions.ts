@@ -129,7 +129,6 @@ export const generateScript = createServerFn({ method: "POST" })
         transcribeForCaptions,
         wordsToSrt,
         fetchStockClips,
-        submitShotstackRender,
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -176,7 +175,7 @@ export const generateScript = createServerFn({ method: "POST" })
         })
         .eq("id", video.id);
 
-      // 4) STOCK CLIPS (both tiers — premium also gets a rendered MP4)
+      // 4) STOCK CLIPS
       await supabase
         .from("videos")
         .update({ status: "sourcing_visuals" })
@@ -184,35 +183,18 @@ export const generateScript = createServerFn({ method: "POST" })
       const clips = await fetchStockClips(nicheKeyword, 4);
       await supabase
         .from("videos")
-        .update({ stock_clips: clips })
+        .update({ stock_clips: clips, status: "ready" })
         .eq("id", video.id);
 
-      // 5) RENDER via Shotstack.
-      // Premium: no burn-in (SRT goes up as a native YouTube caption track).
-      // Standard: burn-in captions.
-      await supabase
-        .from("videos")
-        .update({ status: "rendering" })
-        .eq("id", video.id);
-      const renderId = await submitShotstackRender({
-        voiceUrl: voiceoverUrl,
-        clips,
-        captions: tier === "premium" ? [] : words,
-        totalDuration: duration || 30,
-        captionStyle,
-      });
-      await supabase
-        .from("videos")
-        .update({ shotstack_render_id: renderId })
-        .eq("id", video.id);
-
-      return { ok: true, tier, renderId };
+      return { ok: true, tier, captionStyle };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await fail(msg);
       throw e;
     }
   });
+
+
 
 // Polled from the queue UI while status === "rendering"
 export const pollRender = createServerFn({ method: "POST" })
