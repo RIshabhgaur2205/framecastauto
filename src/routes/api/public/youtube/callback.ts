@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/public/youtube/callback")({
             { auth: { persistSession: false, autoRefreshToken: false } },
           );
 
-          const { error: upErr } = await supabase
+          const { data: chanRow, error: upErr } = await supabase
             .from("channels")
             .upsert(
               {
@@ -55,6 +55,19 @@ export const Route = createFileRoute("/api/public/youtube/callback")({
                 thumbnail_url: channel.thumbnail,
                 status: "connected",
                 connected_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,channel_id" },
+            )
+            .select("id")
+            .single();
+          if (upErr || !chanRow) return bounce({ yt_error: (upErr?.message ?? "upsert_failed").slice(0, 80) });
+
+          const { error: secErr } = await supabase
+            .from("channel_secrets")
+            .upsert(
+              {
+                channel_id: chanRow.id,
+                user_id: decoded.u,
                 oauth_refresh_token: encryptToken(tokens.refresh_token),
                 oauth_access_token: tokens.access_token,
                 oauth_expires_at: new Date(
@@ -62,9 +75,9 @@ export const Route = createFileRoute("/api/public/youtube/callback")({
                 ).toISOString(),
                 oauth_scope: tokens.scope,
               },
-              { onConflict: "user_id,channel_id" },
+              { onConflict: "channel_id" },
             );
-          if (upErr) return bounce({ yt_error: upErr.message.slice(0, 80) });
+          if (secErr) return bounce({ yt_error: secErr.message.slice(0, 80) });
 
           return bounce({
             yt_connected: channel.title,
