@@ -144,5 +144,136 @@ export async function fetchStockClips(query: string, count = 4): Promise<StockCl
   return clips;
 }
 
-/* Shotstack rendering removed — pipeline currently ends after visuals. */
+/* -------------------------------- Shotstack ------------------------------- */
+
+const SHOTSTACK_BASE = "https://api.shotstack.io/edit/stage";
+
+type CaptionStyle = "bold" | "minimal" | "neon" | "subtle";
+
+function captionFontConfig(style: CaptionStyle) {
+  switch (style) {
+    case "neon":
+      return { color: "#A78BFA", size: 64, weight: 800 };
+    case "minimal":
+      return { color: "#FFFFFF", size: 48, weight: 500 };
+    case "subtle":
+      return { color: "#E5E7EB", size: 44, weight: 500 };
+    case "bold":
+    default:
+      return { color: "#FFFFFF", size: 68, weight: 800 };
+  }
+}
+
+function buildShotstackPayload(opts: {
+  voiceoverUrl: string;
+  srtUrl: string | null;
+  clips: StockClip[];
+  duration: number;
+  captionStyle: CaptionStyle;
+  burnCaptions: boolean;
+}) {
+  const { voiceoverUrl, srtUrl, clips, duration, captionStyle, burnCaptions } = opts;
+  if (duration <= 0) throw new Error("Cannot render: duration is 0");
+  if (!clips.length) throw new Error("Cannot render: no clips");
+
+  const per = duration / clips.length;
+  const videoClips = clips.map((c, i) => ({
+    asset: { type: "video", src: c.url },
+    start: +(i * per).toFixed(2),
+    length: +per.toFixed(2),
+    fit: "cover",
+    scale: 1,
+  }));
+
+  const tracks: Array<{ clips: unknown[] }> = [
+    { clips: videoClips },
+    {
+      clips: [
+        {
+          asset: { type: "audio", src: voiceoverUrl },
+          start: 0,
+          length: duration,
+        },
+      ],
+    },
+  ];
+
+  if (burnCaptions && srtUrl) {
+    const f = captionFontConfig(captionStyle);
+    tracks.unshift({
+      clips: [
+        {
+          asset: {
+            type: "caption",
+            src: srtUrl,
+            font: { color: f.color, size: f.size, weight: f.weight, family: "Montserrat ExtraBold" },
+            background: { color: "#000000", opacity: 0.35, padding: 18, borderRadius: 8 },
+            stroke: { color: "#000000", width: 3 },
+          },
+          start: 0,
+          length: duration,
+        },
+      ],
+    });
+  }
+
+  return {
+    timeline: {
+      background: "#000000",
+      tracks,
+    },
+    output: {
+      format: "mp4",
+      size: { width: VIDEO_WIDTH, height: VIDEO_HEIGHT },
+      fps: 30,
+    },
+  };
+}
+
+export async function submitShotstackRender(opts: {
+  voiceoverUrl: string;
+  srtUrl: string | null;
+  clips: StockClip[];
+  duration: number;
+  captionStyle: CaptionStyle;
+  burnCaptions: boolean;
+}): Promise<string> {
+  const apiKey = process.env.SHOTSTACK_API_KEY;
+  if (!apiKey) throw new Error("SHOTSTACK_API_KEY not configured");
+  const payload = buildShotstackPayload(opts);
+  const res = await fetch(`${SHOTSTACK_BASE}/render`, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Shotstack submit ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  const json = (await res.json()) as { response?: { id?: string } };
+  const id = json.response?.id;
+  if (!id) throw new Error("Shotstack returned no render id");
+  return id;
+}
+
+export async function getShotstackStatus(
+  renderId: string,
+): Promise<{ status: string; url: string | null; error: string | null }> {
+  const apiKey = process.env.SHOTSTACK_API_KEY;
+  if (!apiKey) throw new Error("SHOTSTACK_API_KEY not configured");
+  const res = await fetch(`${SHOTSTACK_BASE}/render/${renderId}`, {
+    headers: { "x-api-key": apiKey },
+  });
+  if (!res.ok) {
+    throw new Error(`Shotstack status ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+  const json = (await res.json()) as {
+    response?: { status?: string; url?: string; error?: string };
+  };
+  return {
+    status: json.response?.status ?? "unknown",
+    url: json.response?.url ?? null,
+    error: json.response?.error ?? null,
+  };
+}
+
 

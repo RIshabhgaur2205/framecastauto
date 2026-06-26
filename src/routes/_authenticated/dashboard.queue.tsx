@@ -132,7 +132,34 @@ function QueuePage() {
     };
   }, [qc]);
 
-  // Render polling removed (Shotstack disabled).
+  // Poll Shotstack for any video currently rendering.
+  const renderingIds = videos.filter((v) => v.status === "rendering").map((v) => v.id);
+  const renderingKey = renderingIds.join(",");
+  useEffect(() => {
+    if (!renderingIds.length) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { pollRender } = await import("@/lib/generation.functions");
+        await Promise.all(
+          renderingIds.map((id) =>
+            pollRender({ data: { video_id: id } }).catch(() => null),
+          ),
+        );
+        if (!cancelled) qc.invalidateQueries({ queryKey: ["videos"] });
+      } catch {
+        /* ignore */
+      }
+    };
+    tick();
+    const t = setInterval(tick, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderingKey]);
+
 
 
   const [view, setView] = useState<View>("list");

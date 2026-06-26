@@ -131,6 +131,7 @@ export const generateScript = createServerFn({ method: "POST" })
         transcribeForCaptions,
         wordsToSrt,
         fetchStockClips,
+        submitShotstackRender,
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -167,6 +168,8 @@ export const generateScript = createServerFn({ method: "POST" })
       }
 
       // 3) CAPTIONS — resume if already transcribed
+      let durationSec = (video.duration_seconds as number | null) ?? 0;
+      const srtPath = `${userId}/srt/${video.id}.srt`;
       const hasCaptions =
         Array.isArray(video.captions_json) &&
         (video.captions_json as unknown[]).length > 0 &&
@@ -178,13 +181,13 @@ export const generateScript = createServerFn({ method: "POST" })
           .eq("id", video.id);
         const { words, duration } = await transcribeForCaptions(audioBuf!);
         const srt = wordsToSrt(words);
-        const srtPath = `${userId}/srt/${video.id}.srt`;
         await supabaseAdmin.storage
           .from("video-assets")
           .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
             contentType: "application/x-subrip",
             upsert: true,
           });
+        durationSec = duration;
         await supabase
           .from("videos")
           .update({
@@ -196,28 +199,49 @@ export const generateScript = createServerFn({ method: "POST" })
       }
 
       // 4) STOCK CLIPS — resume if already sourced
-      const hasClips =
-        Array.isArray(video.stock_clips) &&
-        (video.stock_clips as unknown[]).length > 0;
-      if (!hasClips) {
+      let stockClips = (video.stock_clips as unknown as
+        | Array<{ url: string; preview: string; duration: number }>
+        | null) ?? null;
+      if (!stockClips || !stockClips.length) {
         await supabase
           .from("videos")
           .update({ status: "sourcing_visuals", error_message: null })
           .eq("id", video.id);
-        const clips = await fetchStockClips(nicheKeyword, 4);
+        stockClips = await fetchStockClips(nicheKeyword, 4);
         await supabase
           .from("videos")
-          .update({ stock_clips: clips })
+          .update({ stock_clips: stockClips })
           .eq("id", video.id);
       }
 
+      // 5) SHOTSTACK RENDER — submit and let the client poll
+      const signedSrt = await supabaseAdmin.storage
+        .from("video-assets")
+        .createSignedUrl(srtPath, 60 * 60 * 24);
+      const srtUrl = signedSrt.data?.signedUrl ?? null;
+
+      // Premium tier skips burned-in captions (YouTube will use the SRT separately).
+      const burnCaptions = tier !== "premium";
+
+      const renderId = await submitShotstackRender({
+        voiceoverUrl: voiceoverUrl!,
+        srtUrl,
+        clips: stockClips,
+        duration: durationSec || 30,
+        captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
+        burnCaptions,
+      });
+
       await supabase
         .from("videos")
-        .update({ status: "ready" })
+        .update({
+          status: "rendering",
+          shotstack_render_id: renderId,
+          error_message: null,
+        })
         .eq("id", video.id);
 
-
-      return { ok: true, tier, captionStyle };
+      return { ok: true, tier, captionStyle, renderId };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await fail(msg);
@@ -226,6 +250,42 @@ export const generateScript = createServerFn({ method: "POST" })
   });
 
 
+export const pollRender = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => idSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: video } = await supabase
+      .from("videos")
+      .select("id, status, shotstack_render_id, video_url")
+      .eq("id", data.video_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!video) throw new Error("Video not found");
+    if (video.status !== "rendering" || !video.shotstack_render_id) {
+      return { status: video?.status ?? "unknown", url: video?.video_url ?? null };
+    }
+    const { getShotstackStatus } = await import("./pipeline.server");
+    const r = await getShotstackStatus(video.shotstack_render_id);
+    if (r.status === "done" && r.url) {
+      await supabase
+        .from("videos")
+        .update({ status: "ready", video_url: r.url })
+        .eq("id", video.id);
+      return { status: "ready", url: r.url };
+    }
+    if (r.status === "failed") {
+      await supabase
+        .from("videos")
+        .update({
+          status: "failed",
+          error_message: (r.error ?? "Render failed").slice(0, 500),
+        })
+        .eq("id", video.id);
+      return { status: "failed", url: null };
+    }
+    return { status: video.status, url: null };
+  });
 
 
 export const retryVideo = createServerFn({ method: "POST" })
@@ -239,3 +299,4 @@ export const retryVideo = createServerFn({ method: "POST" })
       .eq("user_id", context.userId);
     return { ok: true };
   });
+
