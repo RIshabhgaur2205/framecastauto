@@ -28,10 +28,11 @@ function ChannelsPage() {
     scope: string;
   }>({ open: false, name: "", channelId: null, scope: "" });
 
-  const { data: channels = [] } = useQuery({
+  const { data: channels = [], isLoading } = useQuery({
     queryKey: ["channels"],
     queryFn: () => getChannels(),
   });
+
 
   // Surface OAuth callback result from query params.
   useEffect(() => {
