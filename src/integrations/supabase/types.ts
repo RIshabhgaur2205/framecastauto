@@ -228,9 +228,11 @@ export type Database = {
       videos: {
         Row: {
           caption_style: string | null
+          captions_json: Json | null
           channel_id: string | null
           cost_credits: number
           created_at: string
+          duration_seconds: number | null
           error_message: string | null
           id: string
           niche: string | null
@@ -238,7 +240,10 @@ export type Database = {
           quality_tier: string | null
           scheduled_for: string | null
           script_text: string | null
+          shotstack_render_id: string | null
+          srt_text: string | null
           status: string
+          stock_clips: Json | null
           thumbnail_url: string | null
           title: string | null
           updated_at: string
@@ -248,9 +253,11 @@ export type Database = {
         }
         Insert: {
           caption_style?: string | null
+          captions_json?: Json | null
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          duration_seconds?: number | null
           error_message?: string | null
           id?: string
           niche?: string | null
@@ -258,7 +265,10 @@ export type Database = {
           quality_tier?: string | null
           scheduled_for?: string | null
           script_text?: string | null
+          shotstack_render_id?: string | null
+          srt_text?: string | null
           status?: string
+          stock_clips?: Json | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
@@ -268,9 +278,11 @@ export type Database = {
         }
         Update: {
           caption_style?: string | null
+          captions_json?: Json | null
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          duration_seconds?: number | null
           error_message?: string | null
           id?: string
           niche?: string | null
@@ -278,7 +290,10 @@ export type Database = {
           quality_tier?: string | null
           scheduled_for?: string | null
           script_text?: string | null
+          shotstack_render_id?: string | null
+          srt_text?: string | null
           status?: string
+          stock_clips?: Json | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
