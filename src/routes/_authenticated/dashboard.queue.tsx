@@ -8,6 +8,8 @@ import {
   seedDemoVideos,
 } from "@/lib/videos.functions";
 import { generateScript, retryVideo, pollRender } from "@/lib/generation.functions";
+import { publishVideo } from "@/lib/youtube.functions";
+import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -69,6 +71,12 @@ const STATUS_META: Record<
     dot: "bg-accent",
     text: "text-accent",
     bg: "bg-accent/10 border-accent/30",
+  },
+  publishing: {
+    label: "Publishing",
+    dot: "bg-emerald-400 animate-pulse",
+    text: "text-emerald-300",
+    bg: "bg-emerald-500/10 border-emerald-500/20",
   },
   posted: {
     label: "Posted",
@@ -170,6 +178,19 @@ function QueuePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
   });
 
+  const publish = useServerFn(publishVideo);
+  const publishMut = useMutation({
+    mutationFn: async (id: string) => publish({ data: { video_id: id } }),
+    onSuccess: () => {
+      toast.success("Published to YouTube", { description: "Uploaded as Private — review in YouTube Studio." });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+    },
+    onError: (e) =>
+      toast.error("Publish failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
+  });
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-6">
@@ -225,6 +246,8 @@ function QueuePage() {
           onClose={() => setSelectedId(null)}
           onRetry={() => retryMut.mutate(selected.id)}
           retrying={retryMut.isPending}
+          onPublish={() => publishMut.mutate(selected.id)}
+          publishing={publishMut.isPending}
         />
       )}
     </div>
@@ -428,11 +451,15 @@ function DetailModal({
   onClose,
   onRetry,
   retrying,
+  onPublish,
+  publishing,
 }: {
   video: Video;
   onClose: () => void;
   onRetry: () => void;
   retrying: boolean;
+  onPublish: () => void;
+  publishing: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -536,9 +563,29 @@ function DetailModal({
                   href={video.video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block border border-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent hover:bg-accent hover:text-accent-foreground"
+                  className="inline-block border border-hairline px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-foreground hover:border-accent hover:text-accent"
                 >
-                  Open video
+                  Open render
+                </a>
+              )}
+              {video.status === "ready" && video.channel_id && !video.youtube_video_id && (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={publishing}
+                  className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {publishing ? "Publishing…" : "Publish to YouTube"}
+                </button>
+              )}
+              {video.youtube_video_id && (
+                <a
+                  href={`https://youtube.com/watch?v=${video.youtube_video_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block border border-emerald-500/40 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  View on YouTube
                 </a>
               )}
               {(video.status === "failed" || video.status === "queued") && (
