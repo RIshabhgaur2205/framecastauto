@@ -176,19 +176,7 @@ export const generateScript = createServerFn({ method: "POST" })
         })
         .eq("id", video.id);
 
-      // PREMIUM: stop here. Captions get uploaded as a native YouTube track at publish time.
-      if (tier === "premium") {
-        // For premium, we still need a finished MP4. The chosen flow is: skip burn-in,
-        // but we still need *something* viewable. We'll mark as ready and surface the
-        // voiceover + captions in the UI; final MP4 produced at publish stage with raw clips.
-        await supabase
-          .from("videos")
-          .update({ status: "ready", error_message: null })
-          .eq("id", video.id);
-        return { ok: true, tier, script };
-      }
-
-      // 4) STOCK CLIPS (Standard tier)
+      // 4) STOCK CLIPS (both tiers — premium also gets a rendered MP4)
       await supabase
         .from("videos")
         .update({ status: "sourcing_visuals" })
@@ -199,7 +187,9 @@ export const generateScript = createServerFn({ method: "POST" })
         .update({ stock_clips: clips })
         .eq("id", video.id);
 
-      // 5) RENDER via Shotstack
+      // 5) RENDER via Shotstack.
+      // Premium: no burn-in (SRT goes up as a native YouTube caption track).
+      // Standard: burn-in captions.
       await supabase
         .from("videos")
         .update({ status: "rendering" })
@@ -207,7 +197,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const renderId = await submitShotstackRender({
         voiceUrl: voiceoverUrl,
         clips,
-        captions: words,
+        captions: tier === "premium" ? [] : words,
         totalDuration: duration || 30,
         captionStyle,
       });
