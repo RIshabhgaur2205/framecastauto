@@ -295,12 +295,17 @@ function buildJ2VPayload(opts: {
   // and the rest to stock B-roll. References open the video (hero shot) and reappear later.
   const refCount = referenceMedia.length;
   const stockCount = clips.length;
+  // With no stock b-roll (ad mode: brand media + Gemini-generated frames only),
+  // spread the full timeline across the available visuals so nothing goes black.
   const refDuration = refCount
-    ? Math.min(4, Math.max(2.5, (duration * 0.35) / refCount))
+    ? stockCount
+      ? Math.min(4, Math.max(2.5, (duration * 0.35) / refCount))
+      : Math.max(1.5, duration / refCount)
     : 0;
   const totalRefTime = +(refDuration * refCount).toFixed(2);
   const stockTotal = Math.max(duration - totalRefTime, stockCount * 1.5);
   const stockPer = stockCount ? +(stockTotal / stockCount).toFixed(2) : 0;
+
   const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
   const refScene = (m: ReferenceMedia, i: number) => ({
