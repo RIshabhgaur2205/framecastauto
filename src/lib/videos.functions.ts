@@ -51,14 +51,30 @@ const createSchema = z.object({
   video_style: z.enum(STYLES).optional(),
   product_description: z.string().trim().max(2000).optional(),
   reference_media: refMediaSchema,
+  video_type: z.enum(["content", "ad"]).optional(),
+  product_name: z.string().trim().max(160).optional(),
+  offer_text: z.string().trim().max(200).optional(),
+  cta_text: z.string().trim().max(120).optional(),
+  cta_url: z.string().trim().max(300).optional(),
+  ad_objective: z
+    .enum(["awareness", "launch", "promo", "retargeting"])
+    .optional(),
+  target_seconds: z.union([z.literal(15), z.literal(30), z.literal(60)]).optional(),
 });
 
 export const createVideo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => createSchema.parse(d ?? {}))
   .handler(async ({ data, context }) => {
+    const isAd = data.video_type === "ad";
+    if (isAd && !data.product_description?.trim()) {
+      throw new Error("An advertisement needs a product brief.");
+    }
     const title =
-      data.title ?? `Untitled draft · ${new Date().toLocaleString()}`;
+      data.title ??
+      (isAd && data.product_name?.trim()
+        ? `Ad · ${data.product_name.trim()}`
+        : `Untitled draft · ${new Date().toLocaleString()}`);
     // Auto-link to the user's first connected YouTube channel, if any.
     const { data: ch } = await context.supabase
       .from("channels")
@@ -81,15 +97,23 @@ export const createVideo = createServerFn({ method: "POST" })
         cost_credits: 0,
         channel_id: ch?.id ?? null,
         language: data.language ?? "en",
-        video_style: data.video_style ?? "cinematic",
+        video_style: isAd ? "advertisement" : data.video_style ?? "cinematic",
         product_description: data.product_description?.trim() || null,
         reference_media: data.reference_media ?? [],
+        video_type: isAd ? "ad" : "content",
+        product_name: data.product_name?.trim() || null,
+        offer_text: data.offer_text?.trim() || null,
+        cta_text: data.cta_text?.trim() || null,
+        cta_url: data.cta_url?.trim() || null,
+        ad_objective: isAd ? data.ad_objective ?? "awareness" : null,
+        target_seconds: isAd ? data.target_seconds ?? 30 : null,
       })
       .select()
       .single();
     if (error) throw new Error(error.message);
     return row;
   });
+
 
 // Seed realistic placeholder videos for a fresh user so the queue UI feels populated.
 export const seedDemoVideos = createServerFn({ method: "POST" })
