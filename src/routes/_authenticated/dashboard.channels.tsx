@@ -196,6 +196,36 @@ function ChannelsPage() {
         )}
       </div>
 
+      <div className="mt-16">
+        <div className="label-eyebrow">Other platforms</div>
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+          Publishing beyond YouTube is on the way. Everything you generate here —
+          content shorts and brand ads alike — is rendered vertical, so it will
+          post straight to these once connected.
+        </p>
+        <ul className="mt-4 grid gap-px bg-hairline sm:grid-cols-2">
+          {[
+            { name: "Instagram Reels", note: "Business or Creator account required" },
+            { name: "TikTok", note: "Coming soon" },
+          ].map((p) => (
+            <li
+              key={p.name}
+              className="flex items-center justify-between gap-4 bg-surface p-5"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm text-foreground">{p.name}</div>
+                <div className="mt-1 truncate text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                  {p.note}
+                </div>
+              </div>
+              <span className="shrink-0 border border-hairline px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                Soon
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
+
   );
 }
