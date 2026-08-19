@@ -307,6 +307,7 @@ function buildJ2VPayload(opts: {
     srtUrl,
     clips,
     referenceMedia = [],
+    extraAudio = [],
     duration,
     captionStyle,
     burnCaptions,
