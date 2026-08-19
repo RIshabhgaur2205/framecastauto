@@ -28,15 +28,35 @@ export async function runPublishForVideo(videoId: string, userId: string) {
     if (vErr) throw new Error(vErr.message);
     if (!video) throw new Error("Video not found");
     if (!video.video_url) throw new Error("Video has no rendered MP4 yet");
-    if (!video.channel_id) throw new Error("Video has no linked channel");
+
+    // Older rows may predate the channel connection — fall back to the user's
+    // most recently connected YouTube channel and remember it on the video.
+    let channelRowId = video.channel_id;
+    if (!channelRowId) {
+      const { data: fallback } = await supabase
+        .from("channels")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("provider", "youtube")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!fallback)
+        throw new Error(
+          "No YouTube channel connected. Connect one on the Channels page first.",
+        );
+      channelRowId = fallback.id;
+      await supabase.from("videos").update({ channel_id: channelRowId }).eq("id", videoId);
+    }
 
     const { data: channel, error: cErr } = await supabase
       .from("channels")
       .select("id, channel_id")
-      .eq("id", video.channel_id)
+      .eq("id", channelRowId)
       .maybeSingle();
     if (cErr) throw new Error(cErr.message);
     if (!channel) throw new Error("Channel not found");
+
 
     const { data: secret, error: sErr } = await supabase
       .from("channel_secrets")

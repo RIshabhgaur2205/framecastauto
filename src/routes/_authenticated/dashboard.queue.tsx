@@ -450,7 +450,13 @@ function QueuePage() {
             }
           />
         ) : view === "list" ? (
-          <ListView videos={videos} onSelect={setSelectedId} />
+          <ListView
+            videos={videos}
+            onSelect={setSelectedId}
+            onPublish={(id) => publishMut.mutate(id)}
+            publishingId={publishMut.isPending ? (publishMut.variables ?? null) : null}
+          />
+
         ) : (
           <CalendarView videos={videos} onSelect={setSelectedId} />
         )}
@@ -988,48 +994,70 @@ function GenerateSettingsModal({
 function ListView({
   videos,
   onSelect,
+  onPublish,
+  publishingId,
 }: {
   videos: Video[];
   onSelect: (id: string) => void;
+  onPublish: (id: string) => void;
+  publishingId: string | null;
 }) {
   if (videos.length === 0) return null;
   return (
     <ul className="divide-y divide-hairline border border-hairline bg-surface">
-      {videos.map((v) => (
-        <li key={v.id}>
-          <button
-            type="button"
-            onClick={() => onSelect(v.id)}
-            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-background/40 sm:grid-cols-[1fr_auto_auto] sm:gap-6 sm:px-5"
+      {videos.map((v) => {
+        const canPublish =
+          !!v.video_url && !v.youtube_video_id && v.status !== "publishing";
+        return (
+          <li
+            key={v.id}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 transition-colors hover:bg-background/40 sm:gap-6 sm:px-5"
           >
-            <div className="min-w-0">
-              <div className="truncate text-sm text-foreground">
-                {v.title ?? "Untitled"}
+            <button
+              type="button"
+              onClick={() => onSelect(v.id)}
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left sm:grid-cols-[1fr_auto_auto] sm:gap-6"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm text-foreground">
+                  {v.title ?? "Untitled"}
+                </div>
+                <div className="mt-1 truncate text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  {v.niche ?? "—"} ·{" "}
+                  {v.scheduled_for
+                    ? new Date(v.scheduled_for).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Unscheduled"}
+                </div>
               </div>
-              <div className="mt-1 truncate text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                {v.niche ?? "—"} ·{" "}
-                {v.scheduled_for
-                  ? new Date(v.scheduled_for).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "Unscheduled"}
+              <div className="hidden text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:block">
+                {v.quality_tier ?? "—"}
               </div>
 
-            </div>
-            <div className="hidden text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:block">
-              {v.quality_tier ?? "—"}
-            </div>
+              <StatusBadge status={v.status} />
+            </button>
 
-            <StatusBadge status={v.status} />
-          </button>
-        </li>
-      ))}
+            {canPublish && (
+              <button
+                type="button"
+                onClick={() => onPublish(v.id)}
+                disabled={publishingId === v.id}
+                className="shrink-0 border border-accent/60 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-accent transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+              >
+                {publishingId === v.id ? "Publishing…" : "Publish"}
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
+
 
 function CalendarView({
   videos,
@@ -1295,16 +1323,19 @@ function DetailModal({
                   Open render
                 </a>
               )}
-              {video.status === "ready" && video.channel_id && !video.youtube_video_id && (
-                <button
-                  type="button"
-                  onClick={onPublish}
-                  disabled={publishing}
-                  className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
-                >
-                  {publishing ? "Publishing…" : "Publish to YouTube"}
-                </button>
-              )}
+              {video.video_url &&
+                !video.youtube_video_id &&
+                video.status !== "publishing" && (
+                  <button
+                    type="button"
+                    onClick={onPublish}
+                    disabled={publishing}
+                    className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
+                  >
+                    {publishing ? "Publishing…" : "Publish to YouTube"}
+                  </button>
+                )}
+
               {video.youtube_video_id && (
                 <a
                   href={`https://youtube.com/watch?v=${video.youtube_video_id}`}
