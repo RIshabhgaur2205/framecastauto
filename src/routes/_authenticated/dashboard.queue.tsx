@@ -558,14 +558,50 @@ function GenerateSettingsModal({
         className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto border border-hairline bg-surface"
       >
         <div className="border-b border-hairline p-6">
-          <div className="label-eyebrow">New video</div>
+          <div className="label-eyebrow">{isAd ? "New advertisement" : "New video"}</div>
           <h2 className="display mt-2 text-2xl text-foreground">Set the brief.</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Language, style, and (optionally) a product to feature.
+            {isAd
+              ? "Your brand kit drives the voice, logo, colors and end card."
+              : "Language, style, and (optionally) a product to feature."}
           </p>
         </div>
 
         <div className="space-y-6 p-6">
+          <div>
+            <label className="label-eyebrow mb-2 block">What are we making?</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["content", "Content video", "Topical short for your channel."],
+                  ["ad", "Advertisement", "Sell a product with a hook and CTA."],
+                ] as const
+              ).map(([val, label, desc]) => {
+                const active = videoType === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setVideoType(val)}
+                    disabled={submitting}
+                    className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                      active
+                        ? "border-accent bg-accent/10"
+                        : "border-hairline bg-background hover:border-accent/50"
+                    }`}
+                  >
+                    <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                      {label}
+                    </div>
+                    <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      {desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <label className="label-eyebrow mb-2 block">Language</label>
             <select
@@ -582,34 +618,139 @@ function GenerateSettingsModal({
             </select>
           </div>
 
-          <div>
-            <label className="label-eyebrow mb-2 block">Video style</label>
-            <div className="grid grid-cols-2 gap-2">
-              {STYLE_OPTIONS.map((o) => {
-                const active = videoStyle === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => setVideoStyle(o.value)}
+          {isAd ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label-eyebrow mb-2 block">Product name</label>
+                  <input
+                    value={adFields.product_name}
+                    onChange={(e) => setAd("product_name", e.target.value)}
                     disabled={submitting}
-                    className={`border p-3 text-left transition-colors disabled:opacity-50 ${
-                      active
-                        ? "border-accent bg-accent/10"
-                        : "border-hairline bg-background hover:border-accent/50"
-                    }`}
-                  >
-                    <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
-                      {o.label}
-                    </div>
-                    <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                      {o.desc}
-                    </div>
-                  </button>
-                );
-              })}
+                    maxLength={160}
+                    placeholder="Cloudweave Tee"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Offer (optional)</label>
+                  <input
+                    value={adFields.offer_text}
+                    onChange={(e) => setAd("offer_text", e.target.value)}
+                    disabled={submitting}
+                    maxLength={200}
+                    placeholder="20% off this week"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Call to action</label>
+                  <input
+                    value={adFields.cta_text}
+                    onChange={(e) => setAd("cta_text", e.target.value)}
+                    disabled={submitting}
+                    maxLength={120}
+                    placeholder="Shop now"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Link shown on end card</label>
+                  <input
+                    value={adFields.cta_url}
+                    onChange={(e) => setAd("cta_url", e.target.value)}
+                    disabled={submitting}
+                    maxLength={300}
+                    placeholder="yourbrand.com/tee"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label-eyebrow mb-2 block">Objective</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {OBJECTIVE_OPTIONS.map((o) => {
+                    const active = adFields.ad_objective === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => setAd("ad_objective", o.value)}
+                        disabled={submitting}
+                        className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                          active
+                            ? "border-accent bg-accent/10"
+                            : "border-hairline bg-background hover:border-accent/50"
+                        }`}
+                      >
+                        <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                          {o.label}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                          {o.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="label-eyebrow mb-2 block">Length</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([15, 30, 60] as const).map((s) => {
+                    const active = adFields.target_seconds === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setAd("target_seconds", s)}
+                        disabled={submitting}
+                        className={`h-11 border text-xs uppercase tracking-[0.2em] transition-colors disabled:opacity-50 ${
+                          active
+                            ? "border-accent text-accent"
+                            : "border-hairline text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}s
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="label-eyebrow mb-2 block">Video style</label>
+              <div className="grid grid-cols-2 gap-2">
+                {STYLE_OPTIONS.map((o) => {
+                  const active = videoStyle === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setVideoStyle(o.value)}
+                      disabled={submitting}
+                      className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                        active
+                          ? "border-accent bg-accent/10"
+                          : "border-hairline bg-background hover:border-accent/50"
+                      }`}
+                    >
+                      <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                        {o.label}
+                      </div>
+                      <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                        {o.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
 
           <div>
             <label className="label-eyebrow mb-2 block">Product / subject brief</label>
