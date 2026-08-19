@@ -576,8 +576,14 @@ export const generateScript = createServerFn({ method: "POST" })
           const jobId = jobs[String(idx)];
 
           if (!jobId) {
+            const line = adLines[idx] ?? adLines[adLines.length - 1] ?? "";
+            const shotPrompt = shots[idx] ?? shots[shots.length - 1];
+            // The clip must carry the speech itself: same face, same voice.
+            const prompt = line
+              ? `${shotPrompt}\n\nSpoken dialogue (the character says this out loud to camera, in ${langName}, with accurate lip sync, natural pacing, finishing within the shot): "${line}"\n\nAudio: only this character's voice — ${personaText} — plus light natural room ambience. No background music, no narrator, no second voice, no sound effects, no subtitles.`
+              : shotPrompt;
             const started = await startAdVideoJob({
-              prompt: shots[idx] ?? shots[shots.length - 1],
+              prompt,
               seconds: "8",
               premium: tier === "premium",
               ref: seed,
@@ -588,6 +594,7 @@ export const generateScript = createServerFn({ method: "POST" })
             await progress("sourcing_visuals");
             return waiting(12000);
           }
+
 
           const job = await getAdVideoJob(jobId);
           if (job.status === "failed") {
