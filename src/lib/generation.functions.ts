@@ -470,8 +470,8 @@ export const generateScript = createServerFn({ method: "POST" })
 
       if (isAd) {
         stockClips = [];
-        // One 8s live-action clip per ~8s of voiceover, capped so cost stays sane.
-        const sceneCount = Math.max(2, Math.min(6, Math.round((durationSec || 30) / 8)));
+        // One 8s live-action take per spoken line, capped so cost stays sane.
+        const sceneCount = adSceneCount;
         const aiDir = `${userId}/ai/${video.id}`;
 
         // Resume: reuse every clip already rendered, only fill the gaps.
@@ -485,32 +485,37 @@ export const generateScript = createServerFn({ method: "POST" })
         const missing: number[] = [];
         for (let i = 0; i < sceneCount; i++) if (!haveIdx.has(i)) missing.push(i);
 
-        const aiClips: Array<{ url: string; type: "video" }> = [];
+        const aiClips: Array<{
+          url: string;
+          type: "video";
+          seconds: number;
+          keepAudio: true;
+        }> = [];
         if (missing.length) {
           await progress("sourcing_visuals");
 
           // Shot list: a single believable on-camera character telling the story,
           // cached on the row so resumed runs never re-plan (or drift).
-          const cachedState = (video as {
-            ai_frames?: { shots?: unknown; jobs?: Record<string, string> } | null;
-          }).ai_frames;
-          let shots: string[] = Array.isArray(cachedState?.shots)
-            ? (cachedState!.shots as unknown[]).filter(
-                (s): s is string => typeof s === "string" && s.trim().length > 0,
-              )
-            : [];
-          const jobs: Record<string, string> = { ...(cachedState?.jobs ?? {}) };
+          let shots: string[] = strings(adState?.shots);
+          const jobs: Record<string, string> = { ...(adState?.jobs ?? {}) };
 
           const productName =
             (video as { product_name?: string | null }).product_name ??
             video.title ??
             nicheKeyword;
 
+          const personaText =
+            persona ??
+            "a 27-year-old woman with long wavy dark hair, light-brown skin, wearing a cream ribbed top, warm bright mid-pitch voice";
+
           if (!shots.length) {
             try {
               const raw = await callLLM(
-                "You are a UGC ad director. You turn a spoken ad script into a shot list for an AI video generator. Each shot is a single continuous ~8 second live-action take. Output ONLY a JSON array of strings in ENGLISH, no prose.",
-                `Spoken ad script (may be in any language):\n"""${script}"""\n\nProduct / business: ${productName}${brand?.brand_name ? ` by ${brand.brand_name}` : ""}.${productBrief ? `\nProduct brief / specs: """${productBrief}"""` : ""}${brand?.target_audience ? `\nAudience: ${brand.target_audience}` : ""}\n\nReturn exactly ${sceneCount} shot descriptions, in script order, for a UGC-style testimonial ad filmed on a modern phone camera. Rules for EVERY shot:\n- The SAME single character appears throughout. Describe that person identically in every shot (age range, gender presentation, hair, clothing) so they look continuous.\n- Shot 1: the character talking straight to camera, handheld selfie framing, delivering the hook.\n- Middle shots: the character actually using ${productName} in a real environment, plus one tight product close-up (macro, product hero) and one shot showing the result/benefit.\n- Final shot: the character back to camera recommending ${productName}.\n- Include: camera framing and movement, lens feel, location, time of day, lighting, wardrobe, and the character's expression/action.\n- Natural, documentary realism — imperfect handheld motion, real skin texture, natural light. NOT a polished studio commercial, NOT a slideshow, NOT text on screen.\n- End every string with "vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles".\n- Never invent product features beyond the brief.`,
+                "You are a UGC ad director. You turn a spoken ad script into a shot list for an AI video generator that films the actor AND records their speech. Each shot is a single continuous ~8 second live-action take in which the character speaks their line to camera. Output ONLY a JSON array of strings in ENGLISH, no prose.",
+                `Spoken ad script (may be in any language):\n"""${script}"""\n\nThe ONE on-camera character, identical in every shot: """${personaText}"""\n\nSpoken lines, one per shot, in order:\n${adLines
+                  .slice(0, sceneCount)
+                  .map((l, i) => `${i + 1}. ${l}`)
+                  .join("\n")}\n\nProduct / business: ${productName}${brand?.brand_name ? ` by ${brand.brand_name}` : ""}.${productBrief ? `\nProduct brief / specs: """${productBrief}"""` : ""}${brand?.target_audience ? `\nAudience: ${brand.target_audience}` : ""}\n\nReturn exactly ${sceneCount} shot descriptions, in script order, for a UGC-style testimonial ad filmed on a modern phone camera. Rules for EVERY shot:\n- Begin the description by restating the character exactly as given above, verbatim, so they look and sound the same in every shot.\n- The character is ON CAMERA and SPEAKING their line for that shot, with visible mouth movement and matching lip sync. Never describe an unseen narrator.\n- Shot 1: handheld selfie framing, talking straight to camera, delivering the hook.\n- Middle shots: the character speaking while actually using ${productName} in a real environment — hold the product up so it is clearly visible.\n- Final shot: back to selfie framing, recommending ${productName} to camera.\n- Include: camera framing and movement, lens feel, location, time of day, lighting, wardrobe, and the character's expression/action.\n- Audio direction in every shot: only this character's clear natural speaking voice with light room ambience — no music, no voiceover, no second speaker, no subtitles.\n- Natural, documentary realism — imperfect handheld motion, real skin texture, natural light. NOT a polished studio commercial, NOT a slideshow, NOT text on screen.\n- End every string with "vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles".\n- Never invent product features beyond the brief.`,
               );
               const match = raw.match(/\[[\s\S]*\]/);
               if (match) {
@@ -526,20 +531,17 @@ export const generateScript = createServerFn({ method: "POST" })
             }
           }
           if (!shots.length) {
-            const character =
-              "the same 28-year-old customer with shoulder-length dark hair wearing a plain grey t-shirt";
             shots = Array.from({ length: sceneCount }, (_, i) => {
               const beat =
                 i === 0
-                  ? `${character} talking straight to a handheld phone camera in a sunlit apartment, delivering an enthusiastic hook about ${productName}`
+                  ? `${personaText}, talking straight to a handheld phone camera in a sunlit apartment, delivering an enthusiastic hook about ${productName}`
                   : i === sceneCount - 1
-                    ? `${character} holding ${productName} up to the handheld phone camera and recommending it with a warm smile`
-                    : i === 1
-                      ? `macro close-up of ${productName}, slow push-in, soft window light showing material and detail`
-                      : `${character} using ${productName} in a real everyday setting, candid handheld camera following the action`;
-              return `${beat}${productBrief ? `. Product context: ${productBrief.slice(0, 240)}` : ""}. Documentary realism, imperfect handheld motion, natural light, vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles`;
+                    ? `${personaText}, holding ${productName} up to the handheld phone camera and recommending it with a warm smile`
+                    : `${personaText}, speaking to a handheld phone camera while using ${productName} in a real everyday setting, product clearly visible in frame`;
+              return `${beat}${productBrief ? `. Product context: ${productBrief.slice(0, 240)}` : ""}. Only this character's clear natural speaking voice with light room ambience, no music, no voiceover, no second speaker. Documentary realism, imperfect handheld motion, natural light, vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles`;
             });
           }
+
 
           const persistState = async () =>
             supabase
