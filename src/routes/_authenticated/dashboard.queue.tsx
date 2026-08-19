@@ -195,19 +195,30 @@ function QueuePage() {
   );
   const resumingRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const stale = videos.filter((v) => {
-      if (!WORKING.has(v.status)) return false;
-      if (resumingRef.current.has(v.id)) return false;
-      const ts = (v as { last_progress_at?: string | null }).last_progress_at;
-      const at = ts ? Date.parse(ts) : Date.parse(v.created_at as string);
-      return Number.isFinite(at) && Date.now() - at > 3 * 60 * 1000;
-    });
-    for (const v of stale) {
-      resumingRef.current.add(v.id);
-      runPipeline(v.id)
-        .catch(() => {})
-        .finally(() => resumingRef.current.delete(v.id));
-    }
+    const resumeStaleRuns = () => {
+      const stale = videos.filter((v) => {
+        if (!WORKING.has(v.status)) return false;
+        if (resumingRef.current.has(v.id)) return false;
+        const ts = (v as { last_progress_at?: string | null }).last_progress_at;
+        const at = ts ? Date.parse(ts) : Date.parse(v.created_at as string);
+        return Number.isFinite(at) && Date.now() - at > 3 * 60 * 1000;
+      });
+      for (const v of stale) {
+        resumingRef.current.add(v.id);
+        runPipeline(v.id)
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "Generation interrupted";
+            toast.error("Generation paused", { description: message });
+          })
+          .finally(() => resumingRef.current.delete(v.id));
+      }
+    };
+
+    resumeStaleRuns();
+    // A heartbeat can become stale without the videos query changing. Recheck
+    // on a clock so HMR, sleep, or a closed/reopened tab cannot strand a run.
+    const timer = window.setInterval(resumeStaleRuns, 30_000);
+    return () => window.clearInterval(timer);
   }, [videos, runPipeline, WORKING]);
 
 
