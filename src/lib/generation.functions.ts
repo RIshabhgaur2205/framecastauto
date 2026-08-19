@@ -99,8 +99,8 @@ function buildPrompt(
       OBJECTIVE_BRIEFS.awareness;
     const cta = video.cta_text?.trim() || brand?.default_cta?.trim() || "Shop now";
     return {
-      system: `You are a senior direct-response advertising copywriter who writes vertical social video ads (YouTube Shorts, Reels). You write hook-first, benefit-led ad scripts that convert. Respond ONLY with a JSON object of the shape {"script": string, "headline": string, "cta": string}. "script" is the spoken voiceover in ${langName} with no stage directions, labels, or markdown. "headline" is an on-screen hook of at most 6 words. "cta" is an end-card call to action of at most 6 words. No other keys, no prose outside the JSON.`,
-      user: `Write a ${seconds}-second video advertisement.
+      system: `You are a top-performing UGC ad creative director and direct-response copywriter. You write shot-able, live-action vertical video ads (YouTube Shorts, Reels, TikTok) in the style of a real person on camera reviewing a product — not a slideshow with narration. Respond ONLY with a JSON object of the shape {"script": string, "headline": string, "cta": string}. "script" is the words actually SPOKEN ON CAMERA in ${langName}, first person, no stage directions, no labels, no markdown, no quotation marks around lines. "headline" is an on-screen hook of at most 6 words. "cta" is an end-card call to action of at most 6 words. No other keys, no prose outside the JSON.`,
+      user: `Write a ${seconds}-second UGC-style video advertisement, performed by ONE believable on-camera character.
 
 Output language: ${langName} (script, headline, and cta must all be natively in ${langName}).
 ${objective}
@@ -115,17 +115,21 @@ Category: ${niche}
 Product brief (the ONLY source of truth for features and specs):
 """${product}"""
 
-Structure the spoken script in this exact order:
-1. Hook (1 sentence) — a sharp problem or desire the audience feels.
-2. Turn — introduce the product by name as the answer.
-3. Two concrete benefits taken directly from the brief (no invented features, no fake numbers).
-${video.offer_text?.trim() ? "4. State the offer clearly.\n5. Close with the call to action." : "4. Close with the call to action."}
+Write it as a real customer testimonial / review with a storyline, in this order:
+1. Hook (1 sentence) — said straight to camera, a sharp problem or desire the audience feels right now.
+2. Situation — one line of lived, specific personal context that sets up the story ("I was …").
+3. Discovery — the moment they found ${video.product_name?.trim() || "the product"}, named out loud.
+4. Two concrete benefits taken directly from the brief, spoken as first-hand experience (no invented features, no fake numbers).
+5. Proof / result — the visible change afterwards.
+${video.offer_text?.trim() ? "6. State the offer clearly.\n7. Close by telling the viewer what to do: the call to action." : "6. Close by telling the viewer what to do: the call to action."}
 
 Constraints:
-- Roughly ${words} words total so the voiceover lands near ${seconds} seconds.
-- One idea per sentence. Spoken words only — no emojis, hashtags, music cues, or scene labels.
+- Roughly ${words} words total so the performance lands near ${seconds} seconds.
+- Sound like a human talking, not an announcer: contractions, natural rhythm, one idea per sentence, occasional short fragments.
+- No emojis, hashtags, music cues, scene labels, or narrator third-person copy.
 - Never invent specifications, prices, guarantees, or claims that are not in the brief.`,
     };
+
   }
 
   const style = (video.video_style ?? "cinematic").toLowerCase();
