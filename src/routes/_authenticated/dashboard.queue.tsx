@@ -410,12 +410,22 @@ function QueuePage() {
           </div>
           <button
             type="button"
+            onClick={() => setUploadOpen(true)}
+            disabled={uploadMut.isPending}
+            className="cine-press inline-flex items-center gap-2 border border-hairline bg-surface px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-foreground transition-colors hover:border-accent/50 disabled:opacity-50"
+          >
+            <Upload className="h-3.5 w-3.5 text-accent" />
+            Upload video
+          </button>
+          <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
             disabled={generate.isPending}
             className="cine-press border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
             {generate.isPending ? "Queuing…" : "Generate now"}
           </button>
+
         </div>
       </div>
 
