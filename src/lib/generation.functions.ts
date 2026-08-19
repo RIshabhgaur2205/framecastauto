@@ -234,6 +234,35 @@ export const generateScript = createServerFn({ method: "POST" })
       const lang = ((video as { language?: string | null }).language ?? "en").toLowerCase();
       const videoStyle = ((video as { video_style?: string | null }).video_style ?? "cinematic").toLowerCase();
 
+      // Ad state (character persona, spoken lines, shot list, in-flight jobs) is
+      // cached on the row so a resumed run never re-plans or re-bills.
+      type AdState = {
+        persona?: unknown;
+        lines?: unknown;
+        shots?: unknown;
+        jobs?: Record<string, string>;
+        count?: number;
+      };
+      const adState = ((video as { ai_frames?: AdState | null }).ai_frames ?? null) as AdState | null;
+      const strings = (v: unknown): string[] =>
+        Array.isArray(v)
+          ? (v as unknown[])
+              .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+              .map((s) => s.trim())
+          : [];
+      let persona: string | null =
+        typeof adState?.persona === "string" && adState.persona.trim()
+          ? adState.persona.trim()
+          : null;
+      let adLines: string[] = strings(adState?.lines);
+
+      const mergeAdState = async (patch: Record<string, unknown>) => {
+        await supabase
+          .from("videos")
+          .update({ ai_frames: { ...(adState ?? {}), ...patch } } as never)
+          .eq("id", video.id);
+      };
+
       // 1) SCRIPT — resume if already generated
       let script = video.script_text;
       let headline = (video as { headline_text?: string | null }).headline_text ?? null;
@@ -246,17 +275,21 @@ export const generateScript = createServerFn({ method: "POST" })
         const { system, user } = buildPrompt(video, prefs as Prefs | null, brand);
         const raw = await callLLM(system, user);
         if (isAd) {
-          // Ad mode asks for JSON: { script, headline, cta }
+          // Ad mode asks for JSON: { script, headline, cta, persona, lines }
           try {
             const m = raw.match(/\{[\s\S]*\}/);
             const parsed = JSON.parse(m ? m[0] : raw) as {
               script?: string;
               headline?: string;
               cta?: string;
+              persona?: string;
+              lines?: unknown;
             };
             script = parsed.script?.trim() || raw;
             headline = parsed.headline?.trim() || headline;
             ctaText = parsed.cta?.trim() || ctaText;
+            persona = parsed.persona?.trim() || persona;
+            adLines = strings(parsed.lines).slice(0, 6);
           } catch {
             script = raw;
           }
@@ -276,7 +309,19 @@ export const generateScript = createServerFn({ method: "POST" })
               : {}),
           })
           .eq("id", video.id);
+        if (isAd && (persona || adLines.length)) {
+          await mergeAdState({ persona, lines: adLines });
+        }
       }
+
+      // Fall back to sentence chunks so older ad rows (no "lines") still work.
+      if (isAd && !adLines.length && script) {
+        adLines = (script.match(/[^.!?\n]+[.!?]?/g) ?? [script])
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 6);
+      }
+
 
 
       // Niche keyword for stock visuals
