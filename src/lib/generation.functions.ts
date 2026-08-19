@@ -443,33 +443,64 @@ export const generateScript = createServerFn({ method: "POST" })
             );
           }
 
+          // Persist the plan so resumed runs reuse the same prompts.
+          await supabase
+            .from("videos")
+            .update({ ai_frames: { prompts, count: sceneCount } } as never)
+            .eq("id", video.id);
+
           // Seed Gemini with the brand's own product photo when available so the
           // generated frames stay visually faithful to the real product.
           const seedRef = referenceMedia.find((m) => m.type === "image");
           const seed = seedRef ? await fetchAsBase64(seedRef.url) : null;
 
-          for (let i = 0; i < prompts.length; i++) {
+          const batch = missing.slice(0, FRAMES_PER_CALL);
+          let made = 0;
+          for (const idx of batch) {
+            const base = prompts[idx] ?? prompts[prompts.length - 1];
             const prompt = seed
-              ? `Using the attached photo of the real product as the exact visual reference (keep its shape, colour, material and branding identical), create a new advertising frame: ${prompts[i]}`
-              : prompts[i];
+              ? `Using the attached photo of the real product as the exact visual reference (keep its shape, colour, material and branding identical), create a new advertising frame: ${base}`
+              : base;
             let bytes: ArrayBuffer;
             try {
               bytes = await generateAdVisual(prompt, seed);
             } catch (err) {
-              if (aiFrames.length) break; // keep what we have
+              if (made || haveIdx.size) break; // keep what we have, resume later
               throw err;
             }
-            const path = `${aiDir}/${i}.png`;
+            const path = `${aiDir}/${idx}.png`;
             const up = await supabaseAdmin.storage
               .from("video-assets")
               .upload(path, bytes, { contentType: "image/png", upsert: true });
             if (up.error) throw new Error(`Ad frame upload: ${up.error.message}`);
-            const signed = await supabaseAdmin.storage
-              .from("video-assets")
-              .createSignedUrl(path, 60 * 60 * 24);
-            if (signed.data?.signedUrl)
-              aiFrames.push({ url: signed.data.signedUrl, type: "image" });
+            haveIdx.add(idx);
+            made++;
+            await progress(); // heartbeat: this run is alive
           }
+
+          if (missing.length > made) {
+            // More frames to go — hand control back to the caller, which
+            // immediately calls this function again to continue.
+            await progress("sourcing_visuals");
+            return {
+              ok: true as const,
+              incomplete: true as const,
+              stage: "visuals" as const,
+              remaining: missing.length - made,
+              tier,
+              captionStyle,
+              renderId: null as string | null,
+            };
+          }
+        }
+
+        for (let i = 0; i < sceneCount; i++) {
+          if (!haveIdx.has(i)) continue;
+          const signed = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(`${aiDir}/${i}.png`, 60 * 60 * 24);
+          if (signed.data?.signedUrl)
+            aiFrames.push({ url: signed.data.signedUrl, type: "image" });
         }
 
         if (!aiFrames.length && !referenceMedia.length)
