@@ -753,7 +753,9 @@ function GenerateSettingsModal({
 
 
           <div>
-            <label className="label-eyebrow mb-2 block">Product / subject brief</label>
+            <label className="label-eyebrow mb-2 block">
+              {isAd ? "Product brief (required)" : "Product / subject brief"}
+            </label>
             <textarea
               value={productDescription}
               onChange={(e) => setProductDescription(e.target.value)}
@@ -764,9 +766,12 @@ function GenerateSettingsModal({
               className="w-full resize-none border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Optional. Leave blank for a niche-based topical video.
+              {isAd
+                ? "Every claim in the ad comes from here — nothing is invented."
+                : "Optional. Leave blank for a niche-based topical video."}
             </p>
           </div>
+
 
           <div>
             <label className="label-eyebrow mb-2 block">
