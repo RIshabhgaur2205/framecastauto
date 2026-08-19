@@ -202,7 +202,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const { data: video, error: vErr } = await supabase
         .from("videos")
         .select(
-          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips, video_type, product_name, offer_text, cta_text, cta_url, ad_objective, target_seconds, headline_text",
+          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips, ai_frames, video_type, product_name, offer_text, cta_text, cta_url, ad_objective, target_seconds, headline_text",
         )
         .eq("id", data.video_id)
         .eq("user_id", userId)
@@ -520,7 +520,10 @@ export const generateScript = createServerFn({ method: "POST" })
             delete jobs[String(idx)];
             await persistState();
             await progress("sourcing_visuals");
-            return waiting(4000); // restart this shot on the next call
+            // Invalid reference formats are deterministic. The next attempt is
+            // started without that reference by startAdVideoJob rather than
+            // endlessly recreating the same doomed job.
+            return waiting(4000);
           }
           if (job.status !== "completed") {
             await progress("sourcing_visuals");
