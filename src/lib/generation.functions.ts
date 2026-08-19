@@ -544,10 +544,14 @@ export const generateScript = createServerFn({ method: "POST" })
 
 
           const persistState = async () =>
-            supabase
-              .from("videos")
-              .update({ ai_frames: { shots, jobs, count: sceneCount } } as never)
-              .eq("id", video.id);
+            mergeAdState({
+              persona: personaText,
+              lines: adLines,
+              shots,
+              jobs,
+              count: sceneCount,
+            });
+
           await persistState();
 
           // Seed the first shot with the brand's real product photo so the
