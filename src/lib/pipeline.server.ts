@@ -288,12 +288,16 @@ export type BrandRenderOpts = {
   brandName?: string | null;
 };
 
+export type ExtraAudio = { url: string; start: number; duration: number };
+
 function buildJ2VPayload(opts: {
   /** null for ads: the spoken audio lives inside the generated clips. */
   voiceoverUrl: string | null;
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
+  /** Per-shot spoken audio for ad clips that came back without a voice track. */
+  extraAudio?: ExtraAudio[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
