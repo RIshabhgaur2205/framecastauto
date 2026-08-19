@@ -34,7 +34,7 @@ export async function synthesizeVoiceover(
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
 
   const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=mp3_44100_128`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
       method: "POST",
       headers: {
