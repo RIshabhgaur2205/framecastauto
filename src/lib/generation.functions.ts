@@ -29,6 +29,43 @@ const STYLE_BRIEFS: Record<string, string> = {
   explainer: "Curious, accessible. Break a complex idea into 2-3 simple beats. End with a 'so what'.",
 };
 
+export type BrandKit = {
+  brand_name: string | null;
+  website_url: string | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  tone: string | null;
+  tone_notes: string | null;
+  target_audience: string | null;
+  default_cta: string | null;
+  logo_path: string | null;
+} | null;
+
+const TONE_BRIEFS: Record<string, string> = {
+  bold: "Confident, punchy, declarative. Short sentences. No hedging.",
+  friendly: "Warm, human, conversational. Like a helpful friend recommending something.",
+  premium: "Restrained, elegant, understated. Quality over volume. No exclamation marks.",
+  technical: "Precise and spec-led. Numbers, materials, measurable outcomes.",
+  playful: "Light, witty, energetic. A little cheeky, never corny.",
+};
+
+const OBJECTIVE_BRIEFS: Record<string, string> = {
+  awareness: "Goal: introduce the brand and product to people who have never heard of it.",
+  launch: "Goal: announce a brand-new product. Lead with novelty and what's different.",
+  promo: "Goal: drive action on a limited-time offer. The offer must be unmistakable.",
+  retargeting: "Goal: convince someone who already saw the product. Handle the top objection and remove friction.",
+};
+
+type AdFields = {
+  video_type?: string | null;
+  product_name?: string | null;
+  offer_text?: string | null;
+  cta_text?: string | null;
+  cta_url?: string | null;
+  ad_objective?: string | null;
+  target_seconds?: number | null;
+};
+
 function buildPrompt(
   video: {
     title: string | null;
@@ -37,19 +74,62 @@ function buildPrompt(
     language?: string | null;
     video_style?: string | null;
     product_description?: string | null;
-  },
+  } & AdFields,
   prefs: Prefs | null,
+  brand: BrandKit = null,
 ) {
   const niche = video.niche ?? prefs?.niche_custom ?? prefs?.niche ?? "general";
   const tier = video.quality_tier ?? prefs?.quality_tier ?? "standard";
-  const voice =
-    prefs?.brand_voice_notes?.trim() ||
-    "Direct, confident, no fluff. Conversational but sharp.";
   const lang = (video.language ?? "en").toLowerCase();
   const langName = LANG_NAMES[lang] ?? "English";
+  const product = video.product_description?.trim();
+  const isAd = video.video_type === "ad";
+
+  const brandTone = brand?.tone ? TONE_BRIEFS[brand.tone] ?? "" : "";
+  const voice =
+    [brandTone, brand?.tone_notes?.trim(), prefs?.brand_voice_notes?.trim()]
+      .filter(Boolean)
+      .join(" ") || "Direct, confident, no fluff. Conversational but sharp.";
+
+  if (isAd) {
+    const seconds = video.target_seconds ?? 30;
+    const words = Math.round(seconds * 2.4);
+    const objective =
+      OBJECTIVE_BRIEFS[(video.ad_objective ?? "awareness").toLowerCase()] ??
+      OBJECTIVE_BRIEFS.awareness;
+    const cta = video.cta_text?.trim() || brand?.default_cta?.trim() || "Shop now";
+    return {
+      system: `You are a senior direct-response advertising copywriter who writes vertical social video ads (YouTube Shorts, Reels). You write hook-first, benefit-led ad scripts that convert. Respond ONLY with a JSON object of the shape {"script": string, "headline": string, "cta": string}. "script" is the spoken voiceover in ${langName} with no stage directions, labels, or markdown. "headline" is an on-screen hook of at most 6 words. "cta" is an end-card call to action of at most 6 words. No other keys, no prose outside the JSON.`,
+      user: `Write a ${seconds}-second video advertisement.
+
+Output language: ${langName} (script, headline, and cta must all be natively in ${langName}).
+${objective}
+Brand: ${brand?.brand_name?.trim() || "(unnamed brand)"}${brand?.website_url ? ` (${brand.website_url})` : ""}
+Brand voice: ${voice}
+Target audience: ${brand?.target_audience?.trim() || "general consumers who would buy this product"}
+Product name: ${video.product_name?.trim() || "(use the name in the brief)"}
+${video.offer_text?.trim() ? `Offer to feature verbatim: "${video.offer_text.trim()}"` : "No promotional offer — do not invent one."}
+Required call to action: "${cta}"
+Category: ${niche}
+
+Product brief (the ONLY source of truth for features and specs):
+"""${product}"""
+
+Structure the spoken script in this exact order:
+1. Hook (1 sentence) — a sharp problem or desire the audience feels.
+2. Turn — introduce the product by name as the answer.
+3. Two concrete benefits taken directly from the brief (no invented features, no fake numbers).
+${video.offer_text?.trim() ? "4. State the offer clearly.\n5. Close with the call to action." : "4. Close with the call to action."}
+
+Constraints:
+- Roughly ${words} words total so the voiceover lands near ${seconds} seconds.
+- One idea per sentence. Spoken words only — no emojis, hashtags, music cues, or scene labels.
+- Never invent specifications, prices, guarantees, or claims that are not in the brief.`,
+    };
+  }
+
   const style = (video.video_style ?? "cinematic").toLowerCase();
   const styleBrief = STYLE_BRIEFS[style] ?? STYLE_BRIEFS.cinematic;
-  const product = video.product_description?.trim();
   const lengthHint =
     tier === "premium"
       ? "Target ~60-75 seconds of spoken voiceover."
@@ -76,6 +156,7 @@ Constraints:
 - No emojis, no hashtags, no music cues, no captions — just the spoken words.`,
   };
 }
+
 
 async function callLLM(system: string, user: string): Promise<string> {
   const apiKey = process.env.LOVABLE_API_KEY;
@@ -117,7 +198,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const { data: video, error: vErr } = await supabase
         .from("videos")
         .select(
-          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
+          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips, video_type, product_name, offer_text, cta_text, cta_url, ad_objective, target_seconds, headline_text",
         )
         .eq("id", data.video_id)
         .eq("user_id", userId)
@@ -131,6 +212,16 @@ export const generateScript = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .maybeSingle();
 
+      const { data: brandRow } = await supabase
+        .from("brand_profiles")
+        .select(
+          "brand_name, website_url, primary_color, accent_color, tone, tone_notes, target_audience, default_cta, logo_path",
+        )
+        .eq("user_id", userId)
+        .maybeSingle();
+      const brand = (brandRow ?? null) as BrandKit;
+
+      const isAd = (video as { video_type?: string | null }).video_type === "ad";
       const tier = (video.quality_tier ?? prefs?.quality_tier ?? "standard") as
         | "standard"
         | "premium";
@@ -141,18 +232,48 @@ export const generateScript = createServerFn({ method: "POST" })
 
       // 1) SCRIPT — resume if already generated
       let script = video.script_text;
+      let headline = (video as { headline_text?: string | null }).headline_text ?? null;
+      let ctaText = (video as { cta_text?: string | null }).cta_text ?? null;
       if (!script) {
         await supabase
           .from("videos")
           .update({ status: "generating_script", error_message: null })
           .eq("id", video.id);
-        const { system, user } = buildPrompt(video, prefs as Prefs | null);
-        script = await callLLM(system, user);
+        const { system, user } = buildPrompt(video, prefs as Prefs | null, brand);
+        const raw = await callLLM(system, user);
+        if (isAd) {
+          // Ad mode asks for JSON: { script, headline, cta }
+          try {
+            const m = raw.match(/\{[\s\S]*\}/);
+            const parsed = JSON.parse(m ? m[0] : raw) as {
+              script?: string;
+              headline?: string;
+              cta?: string;
+            };
+            script = parsed.script?.trim() || raw;
+            headline = parsed.headline?.trim() || headline;
+            ctaText = parsed.cta?.trim() || ctaText;
+          } catch {
+            script = raw;
+          }
+        } else {
+          script = raw;
+        }
         await supabase
           .from("videos")
-          .update({ status: "script_ready", script_text: script })
+          .update({
+            status: "script_ready",
+            script_text: script,
+            ...(isAd
+              ? {
+                  headline_text: headline?.slice(0, 120) ?? null,
+                  cta_text: ctaText?.slice(0, 120) ?? null,
+                }
+              : {}),
+          })
           .eq("id", video.id);
       }
+
 
       // Niche keyword for stock visuals
       const nicheKeyword =
@@ -289,6 +410,15 @@ export const generateScript = createServerFn({ method: "POST" })
         if (url) referenceMedia.push({ url, type: r.type });
       }
 
+      // 4c) BRAND LOGO — sign for watermark / end card.
+      let logoUrl: string | null = null;
+      if (brand?.logo_path) {
+        const signedLogo = await supabaseAdmin.storage
+          .from("video-assets")
+          .createSignedUrl(brand.logo_path, 60 * 60 * 24);
+        logoUrl = signedLogo.data?.signedUrl ?? null;
+      }
+
       // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
@@ -306,7 +436,16 @@ export const generateScript = createServerFn({ method: "POST" })
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
+        isAd,
+        logoUrl,
+        brandPrimary: brand?.primary_color ?? null,
+        brandAccent: brand?.accent_color ?? null,
+        headline: isAd ? headline : null,
+        ctaText: isAd ? ctaText : null,
+        ctaUrl: isAd ? ((video as { cta_url?: string | null }).cta_url ?? null) : null,
+        brandName: brand?.brand_name ?? null,
       });
+
 
       await supabase
         .from("videos")

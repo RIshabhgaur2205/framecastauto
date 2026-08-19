@@ -6,6 +6,8 @@ import { getPreferences, getProfile, upsertPreferences } from "@/lib/profile.fun
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, LogOut } from "lucide-react";
+import { BrandKitSection } from "@/components/dashboard/BrandKitSection";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard/settings")({
   component: SettingsPage,
@@ -217,7 +219,10 @@ function SettingsPage() {
         </button>
       </div>
 
+      <BrandKitSection />
+
       <div className="mt-16 border-t border-hairline pt-10">
+
         <div className="label-eyebrow">Account</div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-hairline bg-surface p-6">
           <div>

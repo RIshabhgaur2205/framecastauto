@@ -198,6 +198,15 @@ function QueuePage() {
   const [genStyle, setGenStyle] = useState("cinematic");
   const [genProduct, setGenProduct] = useState("");
   const [genRefs, setGenRefs] = useState<RefMediaItem[]>([]);
+  const [genType, setGenType] = useState<"content" | "ad">("content");
+  const [adFields, setAdFields] = useState<AdFieldsState>({
+    product_name: "",
+    offer_text: "",
+    cta_text: "",
+    cta_url: "",
+    ad_objective: "awareness",
+    target_seconds: 30,
+  });
 
   const generate = useMutation({
     mutationFn: async (opts: {
@@ -205,6 +214,13 @@ function QueuePage() {
       video_style: string;
       product_description?: string;
       reference_media?: RefMediaItem[];
+      video_type?: "content" | "ad";
+      product_name?: string;
+      offer_text?: string;
+      cta_text?: string;
+      cta_url?: string;
+      ad_objective?: AdObjective;
+      target_seconds?: 15 | 30 | 60;
     }) => {
       const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
@@ -212,6 +228,7 @@ function QueuePage() {
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
+
     onSuccess: () => {
       setSettingsOpen(false);
       setGenProduct("");
@@ -346,18 +363,34 @@ function QueuePage() {
           setProductDescription={setGenProduct}
           referenceMedia={genRefs}
           setReferenceMedia={setGenRefs}
+          videoType={genType}
+          setVideoType={setGenType}
+          adFields={adFields}
+          setAdFields={setAdFields}
           onCancel={() => setSettingsOpen(false)}
           onConfirm={() =>
             generate.mutate({
               language: genLang,
-              video_style: genStyle,
+              video_style: genType === "ad" ? "advertisement" : genStyle,
               product_description: genProduct.trim() || undefined,
               reference_media: genRefs.length ? genRefs : undefined,
+              video_type: genType,
+              ...(genType === "ad"
+                ? {
+                    product_name: adFields.product_name.trim() || undefined,
+                    offer_text: adFields.offer_text.trim() || undefined,
+                    cta_text: adFields.cta_text.trim() || undefined,
+                    cta_url: adFields.cta_url.trim() || undefined,
+                    ad_objective: adFields.ad_objective,
+                    target_seconds: adFields.target_seconds,
+                  }
+                : {}),
             })
           }
           submitting={generate.isPending}
         />
       )}
+
     </div>
   );
 }
@@ -390,6 +423,23 @@ const STYLE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
   { value: "explainer", label: "Explainer", desc: "Break a complex idea into 2-3 simple beats." },
 ];
 
+export type AdObjective = "awareness" | "launch" | "promo" | "retargeting";
+export type AdFieldsState = {
+  product_name: string;
+  offer_text: string;
+  cta_text: string;
+  cta_url: string;
+  ad_objective: AdObjective;
+  target_seconds: 15 | 30 | 60;
+};
+
+const OBJECTIVE_OPTIONS: Array<{ value: AdObjective; label: string; desc: string }> = [
+  { value: "awareness", label: "Awareness", desc: "Introduce the brand to new eyes." },
+  { value: "launch", label: "Launch", desc: "Announce something brand new." },
+  { value: "promo", label: "Promo", desc: "Push a limited-time offer." },
+  { value: "retargeting", label: "Retargeting", desc: "Close people who already looked." },
+];
+
 function GenerateSettingsModal({
   language,
   setLanguage,
@@ -399,6 +449,10 @@ function GenerateSettingsModal({
   setProductDescription,
   referenceMedia,
   setReferenceMedia,
+  videoType,
+  setVideoType,
+  adFields,
+  setAdFields,
   onCancel,
   onConfirm,
   submitting,
@@ -411,10 +465,18 @@ function GenerateSettingsModal({
   setProductDescription: (v: string) => void;
   referenceMedia: RefMediaItem[];
   setReferenceMedia: (v: RefMediaItem[]) => void;
+  videoType: "content" | "ad";
+  setVideoType: (v: "content" | "ad") => void;
+  adFields: AdFieldsState;
+  setAdFields: React.Dispatch<React.SetStateAction<AdFieldsState>>;
   onCancel: () => void;
   onConfirm: () => void;
   submitting: boolean;
 }) {
+  const isAd = videoType === "ad";
+  const setAd = <K extends keyof AdFieldsState>(k: K, v: AdFieldsState[K]) =>
+    setAdFields((cur) => ({ ...cur, [k]: v }));
+
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -496,14 +558,50 @@ function GenerateSettingsModal({
         className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto border border-hairline bg-surface"
       >
         <div className="border-b border-hairline p-6">
-          <div className="label-eyebrow">New video</div>
+          <div className="label-eyebrow">{isAd ? "New advertisement" : "New video"}</div>
           <h2 className="display mt-2 text-2xl text-foreground">Set the brief.</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Language, style, and (optionally) a product to feature.
+            {isAd
+              ? "Your brand kit drives the voice, logo, colors and end card."
+              : "Language, style, and (optionally) a product to feature."}
           </p>
         </div>
 
         <div className="space-y-6 p-6">
+          <div>
+            <label className="label-eyebrow mb-2 block">What are we making?</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["content", "Content video", "Topical short for your channel."],
+                  ["ad", "Advertisement", "Sell a product with a hook and CTA."],
+                ] as const
+              ).map(([val, label, desc]) => {
+                const active = videoType === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setVideoType(val)}
+                    disabled={submitting}
+                    className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                      active
+                        ? "border-accent bg-accent/10"
+                        : "border-hairline bg-background hover:border-accent/50"
+                    }`}
+                  >
+                    <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                      {label}
+                    </div>
+                    <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      {desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <label className="label-eyebrow mb-2 block">Language</label>
             <select
@@ -520,37 +618,144 @@ function GenerateSettingsModal({
             </select>
           </div>
 
-          <div>
-            <label className="label-eyebrow mb-2 block">Video style</label>
-            <div className="grid grid-cols-2 gap-2">
-              {STYLE_OPTIONS.map((o) => {
-                const active = videoStyle === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => setVideoStyle(o.value)}
+          {isAd ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label-eyebrow mb-2 block">Product name</label>
+                  <input
+                    value={adFields.product_name}
+                    onChange={(e) => setAd("product_name", e.target.value)}
                     disabled={submitting}
-                    className={`border p-3 text-left transition-colors disabled:opacity-50 ${
-                      active
-                        ? "border-accent bg-accent/10"
-                        : "border-hairline bg-background hover:border-accent/50"
-                    }`}
-                  >
-                    <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
-                      {o.label}
-                    </div>
-                    <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                      {o.desc}
-                    </div>
-                  </button>
-                );
-              })}
+                    maxLength={160}
+                    placeholder="Cloudweave Tee"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Offer (optional)</label>
+                  <input
+                    value={adFields.offer_text}
+                    onChange={(e) => setAd("offer_text", e.target.value)}
+                    disabled={submitting}
+                    maxLength={200}
+                    placeholder="20% off this week"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Call to action</label>
+                  <input
+                    value={adFields.cta_text}
+                    onChange={(e) => setAd("cta_text", e.target.value)}
+                    disabled={submitting}
+                    maxLength={120}
+                    placeholder="Shop now"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="label-eyebrow mb-2 block">Link shown on end card</label>
+                  <input
+                    value={adFields.cta_url}
+                    onChange={(e) => setAd("cta_url", e.target.value)}
+                    disabled={submitting}
+                    maxLength={300}
+                    placeholder="yourbrand.com/tee"
+                    className="w-full border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label-eyebrow mb-2 block">Objective</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {OBJECTIVE_OPTIONS.map((o) => {
+                    const active = adFields.ad_objective === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => setAd("ad_objective", o.value)}
+                        disabled={submitting}
+                        className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                          active
+                            ? "border-accent bg-accent/10"
+                            : "border-hairline bg-background hover:border-accent/50"
+                        }`}
+                      >
+                        <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                          {o.label}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                          {o.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="label-eyebrow mb-2 block">Length</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([15, 30, 60] as const).map((s) => {
+                    const active = adFields.target_seconds === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setAd("target_seconds", s)}
+                        disabled={submitting}
+                        className={`h-11 border text-xs uppercase tracking-[0.2em] transition-colors disabled:opacity-50 ${
+                          active
+                            ? "border-accent text-accent"
+                            : "border-hairline text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}s
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="label-eyebrow mb-2 block">Video style</label>
+              <div className="grid grid-cols-2 gap-2">
+                {STYLE_OPTIONS.map((o) => {
+                  const active = videoStyle === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setVideoStyle(o.value)}
+                      disabled={submitting}
+                      className={`border p-3 text-left transition-colors disabled:opacity-50 ${
+                        active
+                          ? "border-accent bg-accent/10"
+                          : "border-hairline bg-background hover:border-accent/50"
+                      }`}
+                    >
+                      <div className={`text-sm ${active ? "text-accent" : "text-foreground"}`}>
+                        {o.label}
+                      </div>
+                      <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                        {o.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
 
           <div>
-            <label className="label-eyebrow mb-2 block">Product / subject brief</label>
+            <label className="label-eyebrow mb-2 block">
+              {isAd ? "Product brief (required)" : "Product / subject brief"}
+            </label>
             <textarea
               value={productDescription}
               onChange={(e) => setProductDescription(e.target.value)}
@@ -561,9 +766,12 @@ function GenerateSettingsModal({
               className="w-full resize-none border border-hairline bg-background px-3 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Optional. Leave blank for a niche-based topical video.
+              {isAd
+                ? "Every claim in the ad comes from here — nothing is invented."
+                : "Optional. Leave blank for a niche-based topical video."}
             </p>
           </div>
+
 
           <div>
             <label className="label-eyebrow mb-2 block">
@@ -635,11 +843,17 @@ function GenerateSettingsModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={submitting}
+            disabled={submitting || (isAd && !productDescription.trim())}
+            title={
+              isAd && !productDescription.trim()
+                ? "Add a product brief to generate an ad"
+                : undefined
+            }
             className="cine-press border border-accent bg-accent px-5 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
-            {submitting ? "Queuing…" : "Generate video"}
+            {submitting ? "Queuing…" : isAd ? "Generate ad" : "Generate video"}
           </button>
+
         </div>
       </div>
     </div>
