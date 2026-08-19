@@ -1295,16 +1295,19 @@ function DetailModal({
                   Open render
                 </a>
               )}
-              {video.status === "ready" && video.channel_id && !video.youtube_video_id && (
-                <button
-                  type="button"
-                  onClick={onPublish}
-                  disabled={publishing}
-                  className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
-                >
-                  {publishing ? "Publishing…" : "Publish to YouTube"}
-                </button>
-              )}
+              {video.video_url &&
+                !video.youtube_video_id &&
+                video.status !== "publishing" && (
+                  <button
+                    type="button"
+                    onClick={onPublish}
+                    disabled={publishing}
+                    className="inline-block border border-accent bg-accent px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground hover:opacity-90 disabled:opacity-50"
+                  >
+                    {publishing ? "Publishing…" : "Publish to YouTube"}
+                  </button>
+                )}
+
               {video.youtube_video_id && (
                 <a
                   href={`https://youtube.com/watch?v=${video.youtube_video_id}`}
