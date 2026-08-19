@@ -646,6 +646,8 @@ export const generateScript = createServerFn({ method: "POST" })
 
         // Brand's real media opens the ad; the generated footage carries the story.
         referenceMedia.push(...aiClips);
+        adClipCount = aiClips.length;
+
       } else if (!stockClips || !stockClips.length) {
 
         await supabase
