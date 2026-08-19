@@ -363,18 +363,34 @@ function QueuePage() {
           setProductDescription={setGenProduct}
           referenceMedia={genRefs}
           setReferenceMedia={setGenRefs}
+          videoType={genType}
+          setVideoType={setGenType}
+          adFields={adFields}
+          setAdFields={setAdFields}
           onCancel={() => setSettingsOpen(false)}
           onConfirm={() =>
             generate.mutate({
               language: genLang,
-              video_style: genStyle,
+              video_style: genType === "ad" ? "advertisement" : genStyle,
               product_description: genProduct.trim() || undefined,
               reference_media: genRefs.length ? genRefs : undefined,
+              video_type: genType,
+              ...(genType === "ad"
+                ? {
+                    product_name: adFields.product_name.trim() || undefined,
+                    offer_text: adFields.offer_text.trim() || undefined,
+                    cta_text: adFields.cta_text.trim() || undefined,
+                    cta_url: adFields.cta_url.trim() || undefined,
+                    ad_objective: adFields.ad_objective,
+                    target_seconds: adFields.target_seconds,
+                  }
+                : {}),
             })
           }
           submitting={generate.isPending}
         />
       )}
+
     </div>
   );
 }
