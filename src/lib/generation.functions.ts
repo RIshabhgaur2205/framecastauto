@@ -198,7 +198,7 @@ export const generateScript = createServerFn({ method: "POST" })
       const { data: video, error: vErr } = await supabase
         .from("videos")
         .select(
-          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips",
+          "id, title, niche, quality_tier, caption_style, language, video_style, product_description, reference_media, script_text, voiceover_url, captions_json, srt_text, duration_seconds, stock_clips, video_type, product_name, offer_text, cta_text, cta_url, ad_objective, target_seconds, headline_text",
         )
         .eq("id", data.video_id)
         .eq("user_id", userId)
@@ -212,6 +212,16 @@ export const generateScript = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .maybeSingle();
 
+      const { data: brandRow } = await supabase
+        .from("brand_profiles")
+        .select(
+          "brand_name, website_url, primary_color, accent_color, tone, tone_notes, target_audience, default_cta, logo_path",
+        )
+        .eq("user_id", userId)
+        .maybeSingle();
+      const brand = (brandRow ?? null) as BrandKit;
+
+      const isAd = (video as { video_type?: string | null }).video_type === "ad";
       const tier = (video.quality_tier ?? prefs?.quality_tier ?? "standard") as
         | "standard"
         | "premium";
@@ -222,18 +232,48 @@ export const generateScript = createServerFn({ method: "POST" })
 
       // 1) SCRIPT — resume if already generated
       let script = video.script_text;
+      let headline = (video as { headline_text?: string | null }).headline_text ?? null;
+      let ctaText = (video as { cta_text?: string | null }).cta_text ?? null;
       if (!script) {
         await supabase
           .from("videos")
           .update({ status: "generating_script", error_message: null })
           .eq("id", video.id);
-        const { system, user } = buildPrompt(video, prefs as Prefs | null);
-        script = await callLLM(system, user);
+        const { system, user } = buildPrompt(video, prefs as Prefs | null, brand);
+        const raw = await callLLM(system, user);
+        if (isAd) {
+          // Ad mode asks for JSON: { script, headline, cta }
+          try {
+            const m = raw.match(/\{[\s\S]*\}/);
+            const parsed = JSON.parse(m ? m[0] : raw) as {
+              script?: string;
+              headline?: string;
+              cta?: string;
+            };
+            script = parsed.script?.trim() || raw;
+            headline = parsed.headline?.trim() || headline;
+            ctaText = parsed.cta?.trim() || ctaText;
+          } catch {
+            script = raw;
+          }
+        } else {
+          script = raw;
+        }
         await supabase
           .from("videos")
-          .update({ status: "script_ready", script_text: script })
+          .update({
+            status: "script_ready",
+            script_text: script,
+            ...(isAd
+              ? {
+                  headline_text: headline?.slice(0, 120) ?? null,
+                  cta_text: ctaText?.slice(0, 120) ?? null,
+                }
+              : {}),
+          })
           .eq("id", video.id);
       }
+
 
       // Niche keyword for stock visuals
       const nicheKeyword =
