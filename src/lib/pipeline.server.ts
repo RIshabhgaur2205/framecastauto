@@ -315,7 +315,11 @@ function buildJ2VPayload(opts: {
         type: m.type === "image" ? "image" : "video",
         src: m.url,
         duration: +refDuration.toFixed(2),
-        "fit-mode": "cover",
+        // Fill the full 1080x1920 frame (crop overflow) so nothing is letterboxed.
+        width: VIDEO_WIDTH,
+        height: VIDEO_HEIGHT,
+        resize: "cover",
+        position: "center-center",
         ...(m.type === "video" ? { muted: true, loop: 1 } : {}),
         zoom: zooms[i % zooms.length],
       },
@@ -329,7 +333,10 @@ function buildJ2VPayload(opts: {
         type: "video",
         src: c.url,
         duration: stockPer,
-        "fit-mode": "cover",
+        width: VIDEO_WIDTH,
+        height: VIDEO_HEIGHT,
+        resize: "cover",
+        position: "center-center",
         muted: true,
         loop: 1,
         zoom: zooms[i % zooms.length],
@@ -399,7 +406,7 @@ function buildJ2VPayload(opts: {
         x: VIDEO_WIDTH - 260,
         y: 90,
         width: 180,
-        "fit-mode": "contain",
+        resize: "fit",
       });
     }
     // Branded end card.
@@ -417,7 +424,7 @@ function buildJ2VPayload(opts: {
                 x: (VIDEO_WIDTH - 420) / 2,
                 y: 620,
                 width: 420,
-                "fit-mode": "contain",
+                resize: "fit",
               },
             ]
           : []),
