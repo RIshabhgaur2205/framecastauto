@@ -651,7 +651,19 @@ export async function startAdVideoJob(opts: {
   // remain useful in the final edit, but must not be sent as input_reference
   // or the async job deterministically fails after creation.
   const referenceMime = opts.ref?.mime.toLowerCase().split(";")[0];
-  if (opts.ref && (referenceMime === "image/jpeg" || referenceMime === "image/png")) {
+  const referenceBytes = opts.ref ? Buffer.from(opts.ref.base64, "base64") : null;
+  const isJpeg =
+    referenceBytes?.[0] === 0xff &&
+    referenceBytes?.[1] === 0xd8 &&
+    referenceBytes?.[2] === 0xff;
+  const isPng =
+    referenceBytes?.subarray(0, 8).equals(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    ) ?? false;
+  const hasSupportedReference =
+    (referenceMime === "image/jpeg" && isJpeg) ||
+    (referenceMime === "image/png" && isPng);
+  if (opts.ref && hasSupportedReference) {
     body.input_reference = `data:${referenceMime};base64,${opts.ref.base64}`;
   }
 
