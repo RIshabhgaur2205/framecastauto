@@ -339,6 +339,45 @@ function QueuePage() {
       }),
   });
 
+  // Upload a finished MP4 and publish (or schedule) it as-is.
+  const createUpload = useServerFn(createUploadedVideo);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const uploadMut = useMutation({
+    mutationFn: async (payload: UploadedVideoPayload) => {
+      const row = await createUpload({
+        data: {
+          title: payload.title,
+          description: payload.description,
+          video_url: payload.video_url,
+          storage_path: payload.storage_path,
+          scheduled_for: payload.publishNow ? null : payload.scheduled_for,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      if (payload.publishNow) await publish({ data: { video_id: row.id } });
+      return { row, published: payload.publishNow };
+    },
+    onSuccess: ({ published }) => {
+      setUploadOpen(false);
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      if (published) {
+        toast.success("Uploaded to YouTube", {
+          description: "Posted as Private — review it in YouTube Studio.",
+        });
+      } else {
+        toast.success("Video added to your slate", {
+          description: "It will publish automatically at the scheduled time.",
+        });
+      }
+    },
+    onError: (e) =>
+      toast.error("Upload failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
+  });
+
+
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-6">
