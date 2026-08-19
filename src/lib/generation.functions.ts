@@ -472,6 +472,8 @@ export const generateScript = createServerFn({ method: "POST" })
         | null) ?? null;
       /** How many spoken ad clips ended up on the timeline (drives duration + captions). */
       let adClipCount = 0;
+      /** Voice overlays for ad takes that came back without on-camera audio. */
+      const adExtraAudio: Array<{ url: string; start: number; duration: number }> = [];
 
 
       if (isAd) {
