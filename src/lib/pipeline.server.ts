@@ -357,11 +357,100 @@ function buildJ2VPayload(opts: {
   ];
 
   if (burnCaptions && srtUrl) {
-    globalElements.push({
-      type: "subtitles",
-      captions: srtUrl,
-      settings: captionStyleConfig(captionStyle),
-    });
+    const settings = captionStyleConfig(captionStyle) as Record<string, unknown>;
+    if (isAd && brandPrimary) settings["word-color"] = brandPrimary;
+    globalElements.push({ type: "subtitles", captions: srtUrl, settings });
+  }
+
+  if (isAd) {
+    // On-screen hook for the first ~3.5s.
+    if (headline) {
+      globalElements.push({
+        type: "text",
+        text: headline,
+        start: 0.3,
+        duration: 3.2,
+        x: 80,
+        y: 220,
+        width: VIDEO_WIDTH - 160,
+        settings: {
+          "font-family": "Oswald",
+          "font-size": "76px",
+          "font-weight": "700",
+          color: brandAccent ?? "#FFFFFF",
+          "text-align": "center",
+          "text-shadow": "0 6px 24px rgba(0,0,0,0.65)",
+          "line-height": "1.05",
+        },
+      });
+    }
+    // Persistent logo watermark, top-right.
+    if (logoUrl) {
+      globalElements.push({
+        type: "image",
+        src: logoUrl,
+        start: 0,
+        duration,
+        x: VIDEO_WIDTH - 260,
+        y: 90,
+        width: 180,
+        "fit-mode": "contain",
+      });
+    }
+    // Branded end card.
+    const endCta = ctaText || "Shop now";
+    scenes.push({
+      duration: 2.6,
+      "background-color": brandPrimary ?? "#0A0A0A",
+      elements: [
+        ...(logoUrl
+          ? [
+              {
+                type: "image",
+                src: logoUrl,
+                duration: 2.6,
+                x: (VIDEO_WIDTH - 420) / 2,
+                y: 620,
+                width: 420,
+                "fit-mode": "contain",
+              },
+            ]
+          : []),
+        {
+          type: "text",
+          text: endCta,
+          duration: 2.6,
+          x: 100,
+          y: 1120,
+          width: VIDEO_WIDTH - 200,
+          settings: {
+            "font-family": "Oswald",
+            "font-size": "88px",
+            "font-weight": "700",
+            color: brandAccent ?? "#FFFFFF",
+            "text-align": "center",
+          },
+        },
+        ...(ctaUrl || brandName
+          ? [
+              {
+                type: "text",
+                text: (ctaUrl || brandName) as string,
+                duration: 2.6,
+                x: 100,
+                y: 1290,
+                width: VIDEO_WIDTH - 200,
+                settings: {
+                  "font-family": "Roboto",
+                  "font-size": "46px",
+                  color: brandAccent ?? "#FFFFFF",
+                  "text-align": "center",
+                },
+              },
+            ]
+          : []),
+      ],
+    } as never);
   }
 
   return {
@@ -382,7 +471,8 @@ export async function submitShotstackRender(opts: {
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
-}): Promise<string> {
+} & BrandRenderOpts): Promise<string> {
+
   const apiKey = process.env.JSON2VIDEO_API_KEY;
   if (!apiKey) throw new Error("JSON2VIDEO_API_KEY not configured");
   const payload = buildJ2VPayload(opts);
