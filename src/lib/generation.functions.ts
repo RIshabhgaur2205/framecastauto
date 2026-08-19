@@ -812,6 +812,7 @@ export const generateScript = createServerFn({ method: "POST" })
         srtUrl,
         clips: stockClips!,
         referenceMedia,
+        extraAudio: adExtraAudio,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
