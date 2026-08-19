@@ -423,6 +423,23 @@ const STYLE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
   { value: "explainer", label: "Explainer", desc: "Break a complex idea into 2-3 simple beats." },
 ];
 
+export type AdObjective = "awareness" | "launch" | "promo" | "retargeting";
+export type AdFieldsState = {
+  product_name: string;
+  offer_text: string;
+  cta_text: string;
+  cta_url: string;
+  ad_objective: AdObjective;
+  target_seconds: 15 | 30 | 60;
+};
+
+const OBJECTIVE_OPTIONS: Array<{ value: AdObjective; label: string; desc: string }> = [
+  { value: "awareness", label: "Awareness", desc: "Introduce the brand to new eyes." },
+  { value: "launch", label: "Launch", desc: "Announce something brand new." },
+  { value: "promo", label: "Promo", desc: "Push a limited-time offer." },
+  { value: "retargeting", label: "Retargeting", desc: "Close people who already looked." },
+];
+
 function GenerateSettingsModal({
   language,
   setLanguage,
@@ -432,6 +449,10 @@ function GenerateSettingsModal({
   setProductDescription,
   referenceMedia,
   setReferenceMedia,
+  videoType,
+  setVideoType,
+  adFields,
+  setAdFields,
   onCancel,
   onConfirm,
   submitting,
@@ -444,10 +465,18 @@ function GenerateSettingsModal({
   setProductDescription: (v: string) => void;
   referenceMedia: RefMediaItem[];
   setReferenceMedia: (v: RefMediaItem[]) => void;
+  videoType: "content" | "ad";
+  setVideoType: (v: "content" | "ad") => void;
+  adFields: AdFieldsState;
+  setAdFields: React.Dispatch<React.SetStateAction<AdFieldsState>>;
   onCancel: () => void;
   onConfirm: () => void;
   submitting: boolean;
 }) {
+  const isAd = videoType === "ad";
+  const setAd = <K extends keyof AdFieldsState>(k: K, v: AdFieldsState[K]) =>
+    setAdFields((cur) => ({ ...cur, [k]: v }));
+
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
