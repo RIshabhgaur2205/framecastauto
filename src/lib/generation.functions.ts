@@ -467,6 +467,9 @@ export const generateScript = createServerFn({ method: "POST" })
       let stockClips = (video.stock_clips as unknown as
         | Array<{ url: string; preview: string; duration: number }>
         | null) ?? null;
+      /** How many spoken ad clips ended up on the timeline (drives duration + captions). */
+      let adClipCount = 0;
+
 
       if (isAd) {
         stockClips = [];
