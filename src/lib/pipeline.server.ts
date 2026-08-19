@@ -496,7 +496,7 @@ function buildJ2VPayload(opts: {
 }
 
 export async function submitShotstackRender(opts: {
-  voiceoverUrl: string;
+  voiceoverUrl: string | null;
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
