@@ -198,6 +198,15 @@ function QueuePage() {
   const [genStyle, setGenStyle] = useState("cinematic");
   const [genProduct, setGenProduct] = useState("");
   const [genRefs, setGenRefs] = useState<RefMediaItem[]>([]);
+  const [genType, setGenType] = useState<"content" | "ad">("content");
+  const [adFields, setAdFields] = useState<AdFieldsState>({
+    product_name: "",
+    offer_text: "",
+    cta_text: "",
+    cta_url: "",
+    ad_objective: "awareness",
+    target_seconds: 30,
+  });
 
   const generate = useMutation({
     mutationFn: async (opts: {
@@ -205,6 +214,13 @@ function QueuePage() {
       video_style: string;
       product_description?: string;
       reference_media?: RefMediaItem[];
+      video_type?: "content" | "ad";
+      product_name?: string;
+      offer_text?: string;
+      cta_text?: string;
+      cta_url?: string;
+      ad_objective?: AdObjective;
+      target_seconds?: 15 | 30 | 60;
     }) => {
       const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
@@ -212,6 +228,7 @@ function QueuePage() {
       genScript({ data: { video_id: row.id } }).catch(() => {});
       return row;
     },
+
     onSuccess: () => {
       setSettingsOpen(false);
       setGenProduct("");
