@@ -538,6 +538,7 @@ export async function submitShotstackRender(opts: {
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
+  extraAudio?: ExtraAudio[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
