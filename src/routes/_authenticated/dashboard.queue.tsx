@@ -450,7 +450,13 @@ function QueuePage() {
             }
           />
         ) : view === "list" ? (
-          <ListView videos={videos} onSelect={setSelectedId} />
+          <ListView
+            videos={videos}
+            onSelect={setSelectedId}
+            onPublish={(id) => publishMut.mutate(id)}
+            publishingId={publishMut.isPending ? (publishMut.variables ?? null) : null}
+          />
+
         ) : (
           <CalendarView videos={videos} onSelect={setSelectedId} />
         )}
