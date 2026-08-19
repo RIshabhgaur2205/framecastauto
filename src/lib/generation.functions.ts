@@ -316,7 +316,7 @@ export const generateScript = createServerFn({ method: "POST" })
       } else {
         await supabase
           .from("videos")
-          .update({ status: "generating_voiceover", error_message: null })
+          .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
         audioBuf = await synthesizeVoiceover(script);
         const up1 = await supabaseAdmin.storage
@@ -345,7 +345,7 @@ export const generateScript = createServerFn({ method: "POST" })
       if (!hasCaptions) {
         await supabase
           .from("videos")
-          .update({ status: "generating_captions", error_message: null })
+          .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
         const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
         const srt = wordsToSrt(words);
@@ -522,7 +522,7 @@ export const generateScript = createServerFn({ method: "POST" })
       } else if (!stockClips || !stockClips.length) {
         await supabase
           .from("videos")
-          .update({ status: "sourcing_visuals", error_message: null })
+          .update({ status: "sourcing_visuals", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
 
         const sceneCount = Math.max(4, Math.min(10, Math.round((durationSec || 30) / 5)));
