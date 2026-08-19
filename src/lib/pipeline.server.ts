@@ -412,6 +412,19 @@ function buildJ2VPayload(opts: {
     ? [{ type: "audio", src: voiceoverUrl, start: 0, duration }]
     : [];
 
+  // Safety net: a generated clip that came back silent gets its line spoken by a
+  // voice matching the on-camera character, placed exactly over that shot.
+  for (const a of extraAudio) {
+    globalElements.push({
+      type: "audio",
+      src: a.url,
+      start: +a.start.toFixed(2),
+      duration: +a.duration.toFixed(2),
+    });
+  }
+
+
+
 
   if (burnCaptions && srtUrl) {
     const settings = captionStyleConfig(captionStyle) as Record<string, unknown>;
