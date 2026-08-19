@@ -843,11 +843,17 @@ function GenerateSettingsModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={submitting}
+            disabled={submitting || (isAd && !productDescription.trim())}
+            title={
+              isAd && !productDescription.trim()
+                ? "Add a product brief to generate an ad"
+                : undefined
+            }
             className="cine-press border border-accent bg-accent px-5 py-2 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
-            {submitting ? "Queuing…" : "Generate video"}
+            {submitting ? "Queuing…" : isAd ? "Generate ad" : "Generate video"}
           </button>
+
         </div>
       </div>
     </div>
