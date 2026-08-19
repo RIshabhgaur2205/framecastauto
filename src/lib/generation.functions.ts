@@ -356,67 +356,81 @@ export const generateScript = createServerFn({ method: "POST" })
 
 
       const audioPath = `${userId}/voice/${video.id}.mp3`;
+      const srtPath = `${userId}/srt/${video.id}.srt`;
 
-      // 2) VOICEOVER — resume if mp3 already in storage
+      // Ads: one live-action clip per spoken line, each 8s, and the character's
+      // voice comes from the clip itself — no separate narration track.
+      const AD_CLIP_SECONDS = 8;
+      const adSceneCount = Math.max(2, Math.min(6, adLines.length || 3));
+
       let voiceoverUrl = video.voiceover_url as string | null;
       let audioBuf: ArrayBuffer | null = null;
-      const existingVoice = await supabaseAdmin.storage
-        .from("video-assets")
-        .download(audioPath);
-      if (existingVoice.data && voiceoverUrl) {
-        audioBuf = await existingVoice.data.arrayBuffer();
+      let durationSec = (video.duration_seconds as number | null) ?? 0;
+
+      if (isAd) {
+        // No ElevenLabs step at all: a synthetic narrator over an AI actor is
+        // exactly the mismatch we are removing.
+        voiceoverUrl = null;
+        durationSec = adSceneCount * AD_CLIP_SECONDS;
       } else {
-        await supabase
-          .from("videos")
-          .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
-          .eq("id", video.id);
-        audioBuf = await synthesizeVoiceover(script);
-        const up1 = await supabaseAdmin.storage
+        // 2) VOICEOVER — resume if mp3 already in storage
+        const existingVoice = await supabaseAdmin.storage
           .from("video-assets")
-          .upload(audioPath, audioBuf, { contentType: "audio/mpeg", upsert: true });
-        if (up1.error) throw new Error(`Voice upload: ${up1.error.message}`);
-        const signedVoice = await supabaseAdmin.storage
-          .from("video-assets")
-          .createSignedUrl(audioPath, 60 * 60 * 24);
-        if (signedVoice.error || !signedVoice.data?.signedUrl)
-          throw new Error("Could not sign voice URL");
-        voiceoverUrl = signedVoice.data.signedUrl;
-        await supabase
-          .from("videos")
-          .update({ voiceover_url: voiceoverUrl })
-          .eq("id", video.id);
+          .download(audioPath);
+        if (existingVoice.data && voiceoverUrl) {
+          audioBuf = await existingVoice.data.arrayBuffer();
+        } else {
+          await supabase
+            .from("videos")
+            .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
+            .eq("id", video.id);
+          audioBuf = await synthesizeVoiceover(script);
+          const up1 = await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(audioPath, audioBuf, { contentType: "audio/mpeg", upsert: true });
+          if (up1.error) throw new Error(`Voice upload: ${up1.error.message}`);
+          const signedVoice = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(audioPath, 60 * 60 * 24);
+          if (signedVoice.error || !signedVoice.data?.signedUrl)
+            throw new Error("Could not sign voice URL");
+          voiceoverUrl = signedVoice.data.signedUrl;
+          await supabase
+            .from("videos")
+            .update({ voiceover_url: voiceoverUrl })
+            .eq("id", video.id);
+        }
+
+        // 3) CAPTIONS — resume if already transcribed
+        const hasCaptions =
+          Array.isArray(video.captions_json) &&
+          (video.captions_json as unknown[]).length > 0 &&
+          !!video.srt_text;
+        if (!hasCaptions) {
+          await supabase
+            .from("videos")
+            .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
+            .eq("id", video.id);
+          const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
+          const srt = wordsToSrt(words);
+          await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
+              contentType: "application/x-subrip",
+              upsert: true,
+            });
+          durationSec = duration;
+          await supabase
+            .from("videos")
+            .update({
+              captions_json: words,
+              srt_text: srt,
+              duration_seconds: duration,
+            })
+            .eq("id", video.id);
+        }
       }
 
-      // 3) CAPTIONS — resume if already transcribed
-      let durationSec = (video.duration_seconds as number | null) ?? 0;
-      const srtPath = `${userId}/srt/${video.id}.srt`;
-      const hasCaptions =
-        Array.isArray(video.captions_json) &&
-        (video.captions_json as unknown[]).length > 0 &&
-        !!video.srt_text;
-      if (!hasCaptions) {
-        await supabase
-          .from("videos")
-          .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
-          .eq("id", video.id);
-        const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
-        const srt = wordsToSrt(words);
-        await supabaseAdmin.storage
-          .from("video-assets")
-          .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
-            contentType: "application/x-subrip",
-            upsert: true,
-          });
-        durationSec = duration;
-        await supabase
-          .from("videos")
-          .update({
-            captions_json: words,
-            srt_text: srt,
-            duration_seconds: duration,
-          })
-          .eq("id", video.id);
-      }
 
       const productBrief = (video as { product_description?: string | null })
         .product_description?.trim() || "";
