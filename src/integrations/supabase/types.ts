@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      brand_profiles: {
+        Row: {
+          accent_color: string | null
+          brand_name: string | null
+          created_at: string
+          default_cta: string | null
+          id: string
+          logo_path: string | null
+          primary_color: string | null
+          target_audience: string | null
+          tone: string | null
+          tone_notes: string | null
+          updated_at: string
+          user_id: string
+          website_url: string | null
+        }
+        Insert: {
+          accent_color?: string | null
+          brand_name?: string | null
+          created_at?: string
+          default_cta?: string | null
+          id?: string
+          logo_path?: string | null
+          primary_color?: string | null
+          target_audience?: string | null
+          tone?: string | null
+          tone_notes?: string | null
+          updated_at?: string
+          user_id: string
+          website_url?: string | null
+        }
+        Update: {
+          accent_color?: string | null
+          brand_name?: string | null
+          created_at?: string
+          default_cta?: string | null
+          id?: string
+          logo_path?: string | null
+          primary_color?: string | null
+          target_audience?: string | null
+          tone?: string | null
+          tone_notes?: string | null
+          updated_at?: string
+          user_id?: string
+          website_url?: string | null
+        }
+        Relationships: []
+      }
       channel_secrets: {
         Row: {
           channel_id: string
@@ -268,18 +316,24 @@ export type Database = {
       }
       videos: {
         Row: {
+          ad_objective: string | null
           caption_style: string | null
           captions_json: Json | null
           channel_id: string | null
           cost_credits: number
           created_at: string
+          cta_text: string | null
+          cta_url: string | null
           duration_seconds: number | null
           error_message: string | null
+          headline_text: string | null
           id: string
           language: string
           niche: string | null
+          offer_text: string | null
           posted_at: string | null
           product_description: string | null
+          product_name: string | null
           publish_error: string | null
           published_at: string | null
           quality_tier: string | null
@@ -290,28 +344,36 @@ export type Database = {
           srt_text: string | null
           status: string
           stock_clips: Json | null
+          target_seconds: number | null
           thumbnail_url: string | null
           title: string | null
           updated_at: string
           user_id: string
           video_style: string
+          video_type: string
           video_url: string | null
           voiceover_url: string | null
           youtube_video_id: string | null
         }
         Insert: {
+          ad_objective?: string | null
           caption_style?: string | null
           captions_json?: Json | null
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          cta_text?: string | null
+          cta_url?: string | null
           duration_seconds?: number | null
           error_message?: string | null
+          headline_text?: string | null
           id?: string
           language?: string
           niche?: string | null
+          offer_text?: string | null
           posted_at?: string | null
           product_description?: string | null
+          product_name?: string | null
           publish_error?: string | null
           published_at?: string | null
           quality_tier?: string | null
@@ -322,28 +384,36 @@ export type Database = {
           srt_text?: string | null
           status?: string
           stock_clips?: Json | null
+          target_seconds?: number | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
           user_id: string
           video_style?: string
+          video_type?: string
           video_url?: string | null
           voiceover_url?: string | null
           youtube_video_id?: string | null
         }
         Update: {
+          ad_objective?: string | null
           caption_style?: string | null
           captions_json?: Json | null
           channel_id?: string | null
           cost_credits?: number
           created_at?: string
+          cta_text?: string | null
+          cta_url?: string | null
           duration_seconds?: number | null
           error_message?: string | null
+          headline_text?: string | null
           id?: string
           language?: string
           niche?: string | null
+          offer_text?: string | null
           posted_at?: string | null
           product_description?: string | null
+          product_name?: string | null
           publish_error?: string | null
           published_at?: string | null
           quality_tier?: string | null
@@ -354,11 +424,13 @@ export type Database = {
           srt_text?: string | null
           status?: string
           stock_clips?: Json | null
+          target_seconds?: number | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
           user_id?: string
           video_style?: string
+          video_type?: string
           video_url?: string | null
           voiceover_url?: string | null
           youtube_video_id?: string | null
