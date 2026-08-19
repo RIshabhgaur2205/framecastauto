@@ -438,7 +438,12 @@ export const generateScript = createServerFn({ method: "POST" })
       // 4a) REFERENCE MEDIA — sign storage paths so the renderer can fetch them.
       type RefMedia = { url: string; type: "image" | "video"; path?: string; name?: string };
       const refRaw = ((video as { reference_media?: unknown }).reference_media ?? []) as RefMedia[];
-      const referenceMedia: Array<{ url: string; type: "image" | "video" }> = [];
+      const referenceMedia: Array<{
+        url: string;
+        type: "image" | "video";
+        seconds?: number;
+        keepAudio?: boolean;
+      }> = [];
       for (const r of refRaw) {
         if (!r || (r.type !== "image" && r.type !== "video")) continue;
         let url = r.url;
@@ -448,8 +453,12 @@ export const generateScript = createServerFn({ method: "POST" })
             .createSignedUrl(r.path, 60 * 60 * 24);
           if (signed.data?.signedUrl) url = signed.data.signedUrl;
         }
-        if (url) referenceMedia.push({ url, type: r.type });
+        // In ads the brand's own media is a short silent opener; the spoken
+        // performance lives in the generated clips that follow.
+        if (url) referenceMedia.push({ url, type: r.type, ...(isAd ? { seconds: 2.5 } : {}) });
       }
+      const brandMediaSeconds = isAd ? referenceMedia.length * 2.5 : 0;
+
 
       // 4b) VISUALS
       //  - Ads: NO stock footage. Every shot is a live-action AI-filmed clip
