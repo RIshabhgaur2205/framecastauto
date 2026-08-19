@@ -1,15 +1,35 @@
 // Server-only helpers for the generation pipeline.
 // Never import this from route/component files. Server fns must dynamic-import it.
 
-const ELEVEN_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"; // George
+const ELEVEN_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"; // George (male)
+const ELEVEN_VOICE_FEMALE = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female)
 const VIDEO_WIDTH = 1080;
 const VIDEO_HEIGHT = 1920;
 
 type CaptionWord = { text: string; start: number; end: number };
 
+/** Picks a voice whose gender matches the on-camera character description. */
+export function voiceIdForPersona(persona: string | null | undefined): string {
+  const p = (persona ?? "").toLowerCase();
+  if (/\b(woman|female|she|her|girl|actress|lady)\b/.test(p)) return ELEVEN_VOICE_FEMALE;
+  return ELEVEN_VOICE_ID;
+}
+
+/** True when the MP4 carries an audio track (Veo dialogue) we can keep. */
+export function mp4HasAudio(bytes: ArrayBuffer): boolean {
+  const view = new Uint8Array(bytes);
+  const needles = ["mp4a", "Opus", "ac-3", "esds"];
+  const hay = new TextDecoder("latin1").decode(view.subarray(0, Math.min(view.length, 4_000_000)));
+  return needles.some((n) => hay.includes(n));
+}
+
 /* ----------------------------- ElevenLabs TTS ----------------------------- */
 
-export async function synthesizeVoiceover(text: string): Promise<ArrayBuffer> {
+export async function synthesizeVoiceover(
+  text: string,
+  voiceId: string = ELEVEN_VOICE_ID,
+): Promise<ArrayBuffer> {
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
 
