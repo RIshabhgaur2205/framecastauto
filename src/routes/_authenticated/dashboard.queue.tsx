@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
@@ -161,6 +161,51 @@ function QueuePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderingKey]);
 
+  // The pipeline generates AI ad frames in small batches so no single request
+  // runs past the platform limit; it returns `incomplete` until every frame is
+  // done, so keep calling it until it hands back a finished (or failed) run.
+  const runPipeline = useCallback(
+    async (id: string) => {
+      for (let i = 0; i < 20; i++) {
+        const res = (await genScript({ data: { video_id: id } })) as {
+          incomplete?: boolean;
+        } | null;
+        qc.invalidateQueries({ queryKey: ["videos"] });
+        if (!res?.incomplete) return;
+      }
+    },
+    [genScript, qc],
+  );
+
+  // Watchdog: resume runs whose last progress heartbeat is stale (e.g. the tab
+  // was closed mid-generation), instead of leaving them stuck forever.
+  const WORKING = useMemo(
+    () =>
+      new Set([
+        "generating_script",
+        "generating_voiceover",
+        "generating_captions",
+        "sourcing_visuals",
+      ]),
+    [],
+  );
+  const resumingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const stale = videos.filter((v) => {
+      if (!WORKING.has(v.status)) return false;
+      if (resumingRef.current.has(v.id)) return false;
+      const ts = (v as { last_progress_at?: string | null }).last_progress_at;
+      const at = ts ? Date.parse(ts) : Date.parse(v.created_at as string);
+      return Number.isFinite(at) && Date.now() - at > 3 * 60 * 1000;
+    });
+    for (const v of stale) {
+      resumingRef.current.add(v.id);
+      runPipeline(v.id)
+        .catch(() => {})
+        .finally(() => resumingRef.current.delete(v.id));
+    }
+  }, [videos, runPipeline, WORKING]);
+
 
 
   const [view, setView] = useState<View>("list");
@@ -225,7 +270,7 @@ function QueuePage() {
       const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
       // Fire-and-forget full pipeline; status updates flow via realtime.
-      genScript({ data: { video_id: row.id } }).catch(() => {});
+      runPipeline(row.id).catch(() => {});
       return row;
     },
 
@@ -247,7 +292,7 @@ function QueuePage() {
   const retryMut = useMutation({
     mutationFn: async (id: string) => {
       await retry({ data: { video_id: id } });
-      genScript({ data: { video_id: id } }).catch(() => {});
+      runPipeline(id).catch(() => {});
     },
     onSuccess: () => {
       toast.success("Retrying generation");

@@ -317,6 +317,7 @@ export type Database = {
       videos: {
         Row: {
           ad_objective: string | null
+          ai_frames: Json | null
           caption_style: string | null
           captions_json: Json | null
           channel_id: string | null
@@ -329,6 +330,7 @@ export type Database = {
           headline_text: string | null
           id: string
           language: string
+          last_progress_at: string | null
           niche: string | null
           offer_text: string | null
           posted_at: string | null
@@ -357,6 +359,7 @@ export type Database = {
         }
         Insert: {
           ad_objective?: string | null
+          ai_frames?: Json | null
           caption_style?: string | null
           captions_json?: Json | null
           channel_id?: string | null
@@ -369,6 +372,7 @@ export type Database = {
           headline_text?: string | null
           id?: string
           language?: string
+          last_progress_at?: string | null
           niche?: string | null
           offer_text?: string | null
           posted_at?: string | null
@@ -397,6 +401,7 @@ export type Database = {
         }
         Update: {
           ad_objective?: string | null
+          ai_frames?: Json | null
           caption_style?: string | null
           captions_json?: Json | null
           channel_id?: string | null
@@ -409,6 +414,7 @@ export type Database = {
           headline_text?: string | null
           id?: string
           language?: string
+          last_progress_at?: string | null
           niche?: string | null
           offer_text?: string | null
           posted_at?: string | null

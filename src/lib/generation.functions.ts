@@ -291,6 +291,17 @@ export const generateScript = createServerFn({ method: "POST" })
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+      /** Heartbeat: marks this run alive (and optionally moves the status). */
+      const progress = async (status?: string) => {
+        await supabase
+          .from("videos")
+          .update({
+            last_progress_at: new Date().toISOString(),
+            ...(status ? { status, error_message: null } : {}),
+          } as never)
+          .eq("id", video.id);
+      };
+
 
       const audioPath = `${userId}/voice/${video.id}.mp3`;
 
@@ -305,7 +316,7 @@ export const generateScript = createServerFn({ method: "POST" })
       } else {
         await supabase
           .from("videos")
-          .update({ status: "generating_voiceover", error_message: null })
+          .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
         audioBuf = await synthesizeVoiceover(script);
         const up1 = await supabaseAdmin.storage
@@ -334,7 +345,7 @@ export const generateScript = createServerFn({ method: "POST" })
       if (!hasCaptions) {
         await supabase
           .from("videos")
-          .update({ status: "generating_captions", error_message: null })
+          .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
         const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
         const srt = wordsToSrt(words);
@@ -384,34 +395,39 @@ export const generateScript = createServerFn({ method: "POST" })
 
       if (isAd) {
         stockClips = [];
-        const sceneCount = Math.max(4, Math.min(8, Math.round((durationSec || 30) / 4)));
+        // Cap ad frames: each Gemini frame costs ~20-45s, so keep the set small
+        // and let the renderer stretch them across the timeline.
+        const sceneCount = Math.max(4, Math.min(6, Math.round((durationSec || 30) / 6)));
         const aiDir = `${userId}/ai/${video.id}`;
+        // Frames generated per invocation, so a single request always finishes
+        // well inside the platform request limit instead of dying silently.
+        const FRAMES_PER_CALL = 2;
 
-        // Resume: reuse frames already generated for this video.
+        // Resume: reuse every frame already generated, regenerate only the gaps.
         const existing = await supabaseAdmin.storage.from("video-assets").list(aiDir);
-        const existingNames = (existing.data ?? [])
-          .map((f) => f.name)
-          .filter((n) => n.endsWith(".png"))
-          .sort((a, b) => Number(a.split(".")[0]) - Number(b.split(".")[0]));
+        const haveIdx = new Set(
+          (existing.data ?? [])
+            .filter((f) => f.name.endsWith(".png"))
+            .map((f) => Number(f.name.split(".")[0]))
+            .filter((n) => Number.isInteger(n)),
+        );
+        const missing: number[] = [];
+        for (let i = 0; i < sceneCount; i++) if (!haveIdx.has(i)) missing.push(i);
 
         const aiFrames: Array<{ url: string; type: "image" }> = [];
-        if (existingNames.length >= sceneCount) {
-          for (const name of existingNames.slice(0, sceneCount)) {
-            const signed = await supabaseAdmin.storage
-              .from("video-assets")
-              .createSignedUrl(`${aiDir}/${name}`, 60 * 60 * 24);
-            if (signed.data?.signedUrl)
-              aiFrames.push({ url: signed.data.signedUrl, type: "image" });
-          }
-        } else {
-          await supabase
-            .from("videos")
-            .update({ status: "sourcing_visuals", error_message: null })
-            .eq("id", video.id);
+        if (missing.length) {
+          await progress("sourcing_visuals");
 
           // Scene prompts, grounded strictly in this product / business.
-          let prompts: string[] = [];
+          // Cached on the row so resumed runs don't re-plan (or drift).
+          const cached = (video as { ai_frames?: { prompts?: unknown } | null }).ai_frames;
+          let prompts: string[] = Array.isArray(cached?.prompts)
+            ? (cached!.prompts as unknown[]).filter(
+                (s): s is string => typeof s === "string" && s.trim().length > 0,
+              )
+            : [];
           try {
+            if (prompts.length) throw new Error("cached");
             const raw = await callLLM(
               "You are an ad art director. You turn an ad voiceover script into image-generation prompts for vertical 9:16 ad frames. Output ONLY a JSON array of strings in ENGLISH, no prose.",
               `Ad script (may be in any language):\n"""${script}"""\n\nProduct / business: ${(video as { product_name?: string | null }).product_name ?? video.title ?? "the product"}${brand?.brand_name ? ` by ${brand.brand_name}` : ""}.${productBrief ? `\nProduct brief / specs: """${productBrief}"""` : ""}${brand?.target_audience ? `\nAudience: ${brand.target_audience}` : ""}\nVisual style: ${videoStyle}.\n\nReturn exactly ${sceneCount} image prompts, in script order, that show THIS product/business only — hero shots, the product in use, close-up detail, the target customer with it, and the result/benefit. Every prompt must: name the product explicitly, describe lighting, camera angle and setting, and end with "vertical 9:16 composition, photorealistic, high-end commercial advertising photography, no text, no watermark". Never depict unrelated generic stock scenes and never invent product features.`,
@@ -438,33 +454,64 @@ export const generateScript = createServerFn({ method: "POST" })
             );
           }
 
+          // Persist the plan so resumed runs reuse the same prompts.
+          await supabase
+            .from("videos")
+            .update({ ai_frames: { prompts, count: sceneCount } } as never)
+            .eq("id", video.id);
+
           // Seed Gemini with the brand's own product photo when available so the
           // generated frames stay visually faithful to the real product.
           const seedRef = referenceMedia.find((m) => m.type === "image");
           const seed = seedRef ? await fetchAsBase64(seedRef.url) : null;
 
-          for (let i = 0; i < prompts.length; i++) {
+          const batch = missing.slice(0, FRAMES_PER_CALL);
+          let made = 0;
+          for (const idx of batch) {
+            const base = prompts[idx] ?? prompts[prompts.length - 1];
             const prompt = seed
-              ? `Using the attached photo of the real product as the exact visual reference (keep its shape, colour, material and branding identical), create a new advertising frame: ${prompts[i]}`
-              : prompts[i];
+              ? `Using the attached photo of the real product as the exact visual reference (keep its shape, colour, material and branding identical), create a new advertising frame: ${base}`
+              : base;
             let bytes: ArrayBuffer;
             try {
               bytes = await generateAdVisual(prompt, seed);
             } catch (err) {
-              if (aiFrames.length) break; // keep what we have
+              if (made || haveIdx.size) break; // keep what we have, resume later
               throw err;
             }
-            const path = `${aiDir}/${i}.png`;
+            const path = `${aiDir}/${idx}.png`;
             const up = await supabaseAdmin.storage
               .from("video-assets")
               .upload(path, bytes, { contentType: "image/png", upsert: true });
             if (up.error) throw new Error(`Ad frame upload: ${up.error.message}`);
-            const signed = await supabaseAdmin.storage
-              .from("video-assets")
-              .createSignedUrl(path, 60 * 60 * 24);
-            if (signed.data?.signedUrl)
-              aiFrames.push({ url: signed.data.signedUrl, type: "image" });
+            haveIdx.add(idx);
+            made++;
+            await progress(); // heartbeat: this run is alive
           }
+
+          if (missing.length > made) {
+            // More frames to go — hand control back to the caller, which
+            // immediately calls this function again to continue.
+            await progress("sourcing_visuals");
+            return {
+              ok: true as const,
+              incomplete: true as const,
+              stage: "visuals" as const,
+              remaining: missing.length - made,
+              tier,
+              captionStyle,
+              renderId: null as string | null,
+            };
+          }
+        }
+
+        for (let i = 0; i < sceneCount; i++) {
+          if (!haveIdx.has(i)) continue;
+          const signed = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(`${aiDir}/${i}.png`, 60 * 60 * 24);
+          if (signed.data?.signedUrl)
+            aiFrames.push({ url: signed.data.signedUrl, type: "image" });
         }
 
         if (!aiFrames.length && !referenceMedia.length)
@@ -475,7 +522,7 @@ export const generateScript = createServerFn({ method: "POST" })
       } else if (!stockClips || !stockClips.length) {
         await supabase
           .from("videos")
-          .update({ status: "sourcing_visuals", error_message: null })
+          .update({ status: "sourcing_visuals", error_message: null, last_progress_at: new Date().toISOString() } as never)
           .eq("id", video.id);
 
         const sceneCount = Math.max(4, Math.min(10, Math.round((durationSec || 30) / 5)));
@@ -551,10 +598,11 @@ export const generateScript = createServerFn({ method: "POST" })
           status: "rendering",
           shotstack_render_id: renderId,
           error_message: null,
-        })
+          last_progress_at: new Date().toISOString(),
+        } as never)
         .eq("id", video.id);
 
-      return { ok: true, tier, captionStyle, renderId };
+      return { ok: true, incomplete: false as const, tier, captionStyle, renderId };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await fail(msg);
