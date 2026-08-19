@@ -217,7 +217,10 @@ function SettingsPage() {
         </button>
       </div>
 
+      <BrandKitSection />
+
       <div className="mt-16 border-t border-hairline pt-10">
+
         <div className="label-eyebrow">Account</div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-hairline bg-surface p-6">
           <div>
