@@ -468,6 +468,16 @@ function QueuePage() {
         />
       )}
 
+      {uploadOpen && (
+        <UploadVideoModal
+          submitting={uploadMut.isPending}
+          onCancel={() => setUploadOpen(false)}
+          onConfirm={(payload) => uploadMut.mutate(payload)}
+        />
+      )}
+
+
+
       {settingsOpen && (
         <GenerateSettingsModal
           language={genLang}
