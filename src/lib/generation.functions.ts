@@ -339,6 +339,9 @@ export const generateScript = createServerFn({ method: "POST" })
         getAdVideoJob,
         downloadAdVideoClip,
         fetchAsBase64,
+        mp4HasAudio,
+        voiceIdForPersona,
+
 
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
