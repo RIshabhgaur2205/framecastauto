@@ -4,13 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
+  createUploadedVideo,
   listVideos,
 } from "@/lib/videos.functions";
 import { generateScript, retryVideo } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
 import { toast } from "sonner";
 import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
+import {
+  UploadVideoModal,
+  type UploadedVideoPayload,
+} from "@/components/dashboard/UploadVideoModal";
+
 
 import { supabase } from "@/integrations/supabase/client";
 
