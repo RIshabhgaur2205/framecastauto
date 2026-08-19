@@ -294,3 +294,48 @@ export const seedDemoVideos = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { seeded: rows.length };
   });
+
+// Register a user-uploaded MP4 (already in the video-assets bucket) as a
+// ready-to-publish video, so creators can post files they made elsewhere.
+const uploadSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(4000).optional(),
+  video_url: z.string().url(),
+  storage_path: z.string().trim().min(1).max(500),
+  scheduled_for: z.string().datetime().nullable().optional(),
+});
+
+export const createUploadedVideo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => uploadSchema.parse(d ?? {}))
+  .handler(async ({ data, context }) => {
+    const { data: ch } = await context.supabase
+      .from("channels")
+      .select("id")
+      .eq("user_id", context.userId)
+      .eq("provider", "youtube")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: row, error } = await context.supabase
+      .from("videos")
+      .insert({
+        user_id: context.userId,
+        title: data.title,
+        status: "ready",
+        video_url: data.video_url,
+        script_text: data.description?.trim() || null,
+        scheduled_for: data.scheduled_for ?? null,
+        quality_tier: "standard",
+        caption_style: "bold",
+        cost_credits: 0,
+        channel_id: ch?.id ?? null,
+        video_type: "content",
+        reference_media: [{ url: data.video_url, type: "video", path: data.storage_path }],
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return row;
+  });

@@ -4,13 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createVideo,
+  createUploadedVideo,
   listVideos,
 } from "@/lib/videos.functions";
 import { generateScript, retryVideo } from "@/lib/generation.functions";
 import { publishVideo } from "@/lib/youtube.functions";
 import { toast } from "sonner";
 import { CineSkeletonRows, EmptyState } from "@/components/ui/cine-skeleton";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
+import {
+  UploadVideoModal,
+  type UploadedVideoPayload,
+} from "@/components/dashboard/UploadVideoModal";
+
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -333,6 +339,45 @@ function QueuePage() {
       }),
   });
 
+  // Upload a finished MP4 and publish (or schedule) it as-is.
+  const createUpload = useServerFn(createUploadedVideo);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const uploadMut = useMutation({
+    mutationFn: async (payload: UploadedVideoPayload) => {
+      const row = await createUpload({
+        data: {
+          title: payload.title,
+          description: payload.description,
+          video_url: payload.video_url,
+          storage_path: payload.storage_path,
+          scheduled_for: payload.publishNow ? null : payload.scheduled_for,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      if (payload.publishNow) await publish({ data: { video_id: row.id } });
+      return { row, published: payload.publishNow };
+    },
+    onSuccess: ({ published }) => {
+      setUploadOpen(false);
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      if (published) {
+        toast.success("Uploaded to YouTube", {
+          description: "Posted as Private — review it in YouTube Studio.",
+        });
+      } else {
+        toast.success("Video added to your slate", {
+          description: "It will publish automatically at the scheduled time.",
+        });
+      }
+    },
+    onError: (e) =>
+      toast.error("Upload failed", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      }),
+  });
+
+
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-6">
@@ -365,12 +410,22 @@ function QueuePage() {
           </div>
           <button
             type="button"
+            onClick={() => setUploadOpen(true)}
+            disabled={uploadMut.isPending}
+            className="cine-press inline-flex items-center gap-2 border border-hairline bg-surface px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-foreground transition-colors hover:border-accent/50 disabled:opacity-50"
+          >
+            <Upload className="h-3.5 w-3.5 text-accent" />
+            Upload video
+          </button>
+          <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
             disabled={generate.isPending}
             className="cine-press border border-accent bg-accent px-5 py-2.5 text-[11px] uppercase tracking-[0.25em] text-accent-foreground disabled:opacity-50"
           >
             {generate.isPending ? "Queuing…" : "Generate now"}
           </button>
+
         </div>
       </div>
 
@@ -412,6 +467,16 @@ function QueuePage() {
           publishing={publishMut.isPending}
         />
       )}
+
+      {uploadOpen && (
+        <UploadVideoModal
+          submitting={uploadMut.isPending}
+          onCancel={() => setUploadOpen(false)}
+          onConfirm={(payload) => uploadMut.mutate(payload)}
+        />
+      )}
+
+
 
       {settingsOpen && (
         <GenerateSettingsModal
