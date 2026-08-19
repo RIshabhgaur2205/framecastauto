@@ -633,7 +633,12 @@ export const generateScript = createServerFn({ method: "POST" })
             .from("video-assets")
             .createSignedUrl(`${aiDir}/${i}.mp4`, 60 * 60 * 24);
           if (signed.data?.signedUrl)
-            aiClips.push({ url: signed.data.signedUrl, type: "video" });
+            aiClips.push({
+              url: signed.data.signedUrl,
+              type: "video",
+              seconds: AD_CLIP_SECONDS,
+              keepAudio: true,
+            });
         }
 
         if (!aiClips.length && !referenceMedia.length)
