@@ -410,6 +410,15 @@ export const generateScript = createServerFn({ method: "POST" })
         if (url) referenceMedia.push({ url, type: r.type });
       }
 
+      // 4c) BRAND LOGO — sign for watermark / end card.
+      let logoUrl: string | null = null;
+      if (brand?.logo_path) {
+        const signedLogo = await supabaseAdmin.storage
+          .from("video-assets")
+          .createSignedUrl(brand.logo_path, 60 * 60 * 24);
+        logoUrl = signedLogo.data?.signedUrl ?? null;
+      }
+
       // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
@@ -427,7 +436,16 @@ export const generateScript = createServerFn({ method: "POST" })
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
+        isAd,
+        logoUrl,
+        brandPrimary: brand?.primary_color ?? null,
+        brandAccent: brand?.accent_color ?? null,
+        headline: isAd ? headline : null,
+        ctaText: isAd ? ctaText : null,
+        ctaUrl: isAd ? ((video as { cta_url?: string | null }).cta_url ?? null) : null,
+        brandName: brand?.brand_name ?? null,
       });
+
 
       await supabase
         .from("videos")
