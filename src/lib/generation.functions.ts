@@ -697,6 +697,66 @@ export const generateScript = createServerFn({ method: "POST" })
         logoUrl = signedLogo.data?.signedUrl ?? null;
       }
 
+      // 4d) AD CAPTIONS — the spoken audio lives inside each clip, so cue the
+      // dialogue against clip boundaries instead of transcribing a narration file.
+      if (isAd) {
+        durationSec = brandMediaSeconds + adClipCount * AD_CLIP_SECONDS;
+        const fmt = (t: number) => {
+          const ms = Math.floor((t % 1) * 1000);
+          const s = Math.floor(t) % 60;
+          const m = Math.floor(t / 60) % 60;
+          const h = Math.floor(t / 3600);
+          const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+          return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`;
+        };
+        const cues: Array<{ start: number; end: number; text: string }> = [];
+        const words: Array<{ text: string; start: number; end: number }> = [];
+        for (let i = 0; i < adClipCount; i++) {
+          const line = adLines[i]?.trim();
+          if (!line) continue;
+          const shotStart = brandMediaSeconds + i * AD_CLIP_SECONDS;
+          // Split a line into ~5-word cues spread over the take, minus a short
+          // lead-in/lead-out so text is not on screen before the words are said.
+          const tokens = line.split(/\s+/).filter(Boolean);
+          const span = AD_CLIP_SECONDS - 1.2;
+          const per = span / Math.max(tokens.length, 1);
+          tokens.forEach((t, wi) => {
+            words.push({
+              text: t,
+              start: +(shotStart + 0.5 + wi * per).toFixed(2),
+              end: +(shotStart + 0.5 + (wi + 1) * per).toFixed(2),
+            });
+          });
+          for (let c = 0; c < tokens.length; c += 5) {
+            const chunk = tokens.slice(c, c + 5);
+            cues.push({
+              start: +(shotStart + 0.5 + c * per).toFixed(2),
+              end: +(shotStart + 0.5 + (c + chunk.length) * per).toFixed(2),
+              text: chunk.join(" "),
+            });
+          }
+        }
+        const srt = cues
+          .map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`)
+          .join("\n");
+        if (srt) {
+          await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
+              contentType: "application/x-subrip",
+              upsert: true,
+            });
+        }
+        await supabase
+          .from("videos")
+          .update({
+            captions_json: words,
+            srt_text: srt || null,
+            duration_seconds: durationSec,
+          })
+          .eq("id", video.id);
+      }
+
       // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
@@ -707,7 +767,8 @@ export const generateScript = createServerFn({ method: "POST" })
       const burnCaptions = tier !== "premium";
 
       const renderId = await submitShotstackRender({
-        voiceoverUrl: voiceoverUrl!,
+        voiceoverUrl,
+
         srtUrl,
         clips: stockClips!,
         referenceMedia,
