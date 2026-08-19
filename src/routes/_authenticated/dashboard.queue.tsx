@@ -270,7 +270,7 @@ function QueuePage() {
       const row = await create({ data: opts });
       qc.invalidateQueries({ queryKey: ["videos"] });
       // Fire-and-forget full pipeline; status updates flow via realtime.
-      genScript({ data: { video_id: row.id } }).catch(() => {});
+      runPipeline(row.id).catch(() => {});
       return row;
     },
 
@@ -292,7 +292,7 @@ function QueuePage() {
   const retryMut = useMutation({
     mutationFn: async (id: string) => {
       await retry({ data: { video_id: id } });
-      genScript({ data: { video_id: id } }).catch(() => {});
+      runPipeline(id).catch(() => {});
     },
     onSuccess: () => {
       toast.success("Retrying generation");
