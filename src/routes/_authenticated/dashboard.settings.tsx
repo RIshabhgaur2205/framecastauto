@@ -6,6 +6,8 @@ import { getPreferences, getProfile, upsertPreferences } from "@/lib/profile.fun
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, LogOut } from "lucide-react";
+import { BrandKitSection } from "@/components/dashboard/BrandKitSection";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard/settings")({
   component: SettingsPage,
