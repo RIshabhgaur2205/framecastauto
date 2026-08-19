@@ -291,6 +291,17 @@ export const generateScript = createServerFn({ method: "POST" })
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+      /** Heartbeat: marks this run alive (and optionally moves the status). */
+      const progress = async (status?: string) => {
+        await supabase
+          .from("videos")
+          .update({
+            last_progress_at: new Date().toISOString(),
+            ...(status ? { status, error_message: null } : {}),
+          } as never)
+          .eq("id", video.id);
+      };
+
 
       const audioPath = `${userId}/voice/${video.id}.mp3`;
 
