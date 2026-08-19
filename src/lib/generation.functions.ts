@@ -598,10 +598,11 @@ export const generateScript = createServerFn({ method: "POST" })
           status: "rendering",
           shotstack_render_id: renderId,
           error_message: null,
-        })
+          last_progress_at: new Date().toISOString(),
+        } as never)
         .eq("id", video.id);
 
-      return { ok: true, tier, captionStyle, renderId };
+      return { ok: true, incomplete: false as const, tier, captionStyle, renderId };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await fail(msg);
