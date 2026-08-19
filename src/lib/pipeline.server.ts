@@ -250,6 +250,17 @@ function captionStyleConfig(style: CaptionStyle) {
 
 export type ReferenceMedia = { url: string; type: "image" | "video" };
 
+export type BrandRenderOpts = {
+  isAd?: boolean;
+  logoUrl?: string | null;
+  brandPrimary?: string | null;
+  brandAccent?: string | null;
+  headline?: string | null;
+  ctaText?: string | null;
+  ctaUrl?: string | null;
+  brandName?: string | null;
+};
+
 function buildJ2VPayload(opts: {
   voiceoverUrl: string;
   srtUrl: string | null;
@@ -258,8 +269,25 @@ function buildJ2VPayload(opts: {
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
-}) {
-  const { voiceoverUrl, srtUrl, clips, referenceMedia = [], duration, captionStyle, burnCaptions } = opts;
+} & BrandRenderOpts) {
+  const {
+    voiceoverUrl,
+    srtUrl,
+    clips,
+    referenceMedia = [],
+    duration,
+    captionStyle,
+    burnCaptions,
+    isAd = false,
+    logoUrl = null,
+    brandPrimary = null,
+    brandAccent = null,
+    headline = null,
+    ctaText = null,
+    ctaUrl = null,
+    brandName = null,
+  } = opts;
+
   if (duration <= 0) throw new Error("Cannot render: duration is 0");
   if (!clips.length && !referenceMedia.length) throw new Error("Cannot render: no clips");
 
