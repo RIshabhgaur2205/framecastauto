@@ -382,9 +382,11 @@ function buildJ2VPayload(opts: {
     clips.forEach((c, i) => scenes.push(stockScene(c, i)));
   }
 
-  const globalElements: Array<Record<string, unknown>> = [
-    { type: "audio", src: voiceoverUrl, start: 0, duration },
-  ];
+  // Ads have no separate narration track — each clip speaks for itself.
+  const globalElements: Array<Record<string, unknown>> = voiceoverUrl
+    ? [{ type: "audio", src: voiceoverUrl, start: 0, duration }]
+    : [];
+
 
   if (burnCaptions && srtUrl) {
     const settings = captionStyleConfig(captionStyle) as Record<string, unknown>;
