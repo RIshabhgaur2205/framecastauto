@@ -248,7 +248,14 @@ function captionStyleConfig(style: CaptionStyle) {
   }
 }
 
-export type ReferenceMedia = { url: string; type: "image" | "video" };
+export type ReferenceMedia = {
+  url: string;
+  type: "image" | "video";
+  /** Explicit scene length in seconds (AI ad clips are 8s and must not be cropped). */
+  seconds?: number;
+  /** Keep the clip's own audio track (Veo-generated on-camera dialogue). */
+  keepAudio?: boolean;
+};
 
 export type BrandRenderOpts = {
   isAd?: boolean;
@@ -262,7 +269,8 @@ export type BrandRenderOpts = {
 };
 
 function buildJ2VPayload(opts: {
-  voiceoverUrl: string;
+  /** null for ads: the spoken audio lives inside the generated clips. */
+  voiceoverUrl: string | null;
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
@@ -295,7 +303,7 @@ function buildJ2VPayload(opts: {
   // and the rest to stock B-roll. References open the video (hero shot) and reappear later.
   const refCount = referenceMedia.length;
   const stockCount = clips.length;
-  // With no stock b-roll (ad mode: brand media + Gemini-generated frames only),
+  // With no stock b-roll (ad mode: brand media + AI-generated clips only),
   // spread the full timeline across the available visuals so nothing goes black.
   const refDuration = refCount
     ? stockCount
@@ -308,23 +316,33 @@ function buildJ2VPayload(opts: {
 
   const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
-  const refScene = (m: ReferenceMedia, i: number) => ({
-    duration: +refDuration.toFixed(2),
-    elements: [
-      {
-        type: m.type === "image" ? "image" : "video",
-        src: m.url,
-        duration: +refDuration.toFixed(2),
-        // Fill the full 1080x1920 frame (crop overflow) so nothing is letterboxed.
-        width: VIDEO_WIDTH,
-        height: VIDEO_HEIGHT,
-        resize: "cover",
-        position: "center-center",
-        ...(m.type === "video" ? { muted: true, loop: 1 } : {}),
-        zoom: zooms[i % zooms.length],
-      },
-    ],
-  });
+  const refScene = (m: ReferenceMedia, i: number) => {
+    // Clips that carry spoken dialogue must play at their true length, untouched
+    // and unmuted, or the performance is cut mid-sentence.
+    const d = +(m.seconds ?? refDuration).toFixed(2);
+    return {
+      duration: d,
+      elements: [
+        {
+          type: m.type === "image" ? "image" : "video",
+          src: m.url,
+          duration: d,
+          // Fill the full 1080x1920 frame (crop overflow) so nothing is letterboxed.
+          width: VIDEO_WIDTH,
+          height: VIDEO_HEIGHT,
+          resize: "cover",
+          position: "center-center",
+          ...(m.type === "video"
+            ? m.keepAudio
+              ? { muted: false }
+              : { muted: true, loop: 1 }
+            : {}),
+          ...(m.keepAudio ? {} : { zoom: zooms[i % zooms.length] }),
+        },
+      ],
+    };
+  };
+
 
   const stockScene = (c: StockClip, i: number) => ({
     duration: stockPer,
