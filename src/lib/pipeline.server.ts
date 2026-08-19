@@ -527,8 +527,8 @@ export async function getShotstackStatus(
 
 /* ------------------------- Gemini ad visual generation ------------------------ */
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const IMAGE_MODEL = "google/gemini-2.5-flash-image";
+const AI_IMAGES = "https://ai.gateway.lovable.dev/v1/images/generations";
+const IMAGE_MODEL = "google/gemini-3-pro-image";
 
 /**
  * Generates a single 9:16 ad frame with Gemini. When `refImage` is provided the
@@ -549,29 +549,49 @@ export async function generateAdVisual(
     });
   }
 
-  const res = await fetch(AI_GATEWAY, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: IMAGE_MODEL,
-      messages: [{ role: "user", content }],
-      modalities: ["image", "text"],
-    }),
-  });
-  if (res.status === 429) throw new Error("Image rate limit exceeded. Please retry shortly.");
-  if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
-  if (!res.ok) throw new Error(`Image gen ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  let lastErr = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(AI_IMAGES, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: IMAGE_MODEL,
+        messages: [{ role: "user", content }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (res.status === 429) {
+      const wait = Number(res.headers.get("retry-after") ?? 0) || 2 ** attempt * 2;
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+      throw new Error("Image rate limit exceeded. Please retry shortly.");
+    }
+    if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
+    if (!res.ok) throw new Error(`Image gen ${res.status}: ${(await res.text()).slice(0, 300)}`);
 
-  const json = (await res.json()) as {
-    choices?: Array<{
-      message?: { content?: string; images?: Array<{ image_url?: { url?: string } }> };
-    }>;
-  };
-  const url = json.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  if (!url) throw new Error("Gemini returned no image for the ad scene");
-  const b64 = url.includes(";base64,") ? url.split(";base64,")[1] : url;
-  const bytes = Buffer.from(b64, "base64");
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const json = (await res.json()) as {
+      data?: Array<{ b64_json?: string }>;
+      choices?: Array<{
+        message?: { images?: Array<{ image_url?: { url?: string } }> };
+      }>;
+    };
+    // /v1/images/generations returns data[].b64_json; keep the chat shape as fallback.
+    const raw =
+      json.data?.[0]?.b64_json ?? json.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (raw) {
+      const b64 = raw.includes(";base64,") ? raw.split(";base64,")[1] : raw;
+      const bytes = Buffer.from(b64, "base64");
+      return bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ) as ArrayBuffer;
+    }
+    lastErr = "no image payload";
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new Error(`Gemini returned no image for the ad scene (${lastErr})`);
 }
 
 /** Downloads a media URL and returns base64 + mime for Gemini image editing. */
