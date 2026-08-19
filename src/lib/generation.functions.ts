@@ -580,7 +580,7 @@ export const generateScript = createServerFn({ method: "POST" })
             const shotPrompt = shots[idx] ?? shots[shots.length - 1];
             // The clip must carry the speech itself: same face, same voice.
             const prompt = line
-              ? `${shotPrompt}\n\nSpoken dialogue (the character says this out loud to camera, in ${langName}, with accurate lip sync, natural pacing, finishing within the shot): "${line}"\n\nAudio: only this character's voice — ${personaText} — plus light natural room ambience. No background music, no narrator, no second voice, no sound effects, no subtitles.`
+              ? `${shotPrompt}\n\nSpoken dialogue (the character says this out loud to camera, in ${LANG_NAMES[lang] ?? "English"}, with accurate lip sync, natural pacing, finishing within the shot): "${line}"\n\nAudio: only this character's voice — ${personaText} — plus light natural room ambience. No background music, no narrator, no second voice, no sound effects, no subtitles.`
               : shotPrompt;
             const started = await startAdVideoJob({
               prompt,
