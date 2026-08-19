@@ -616,3 +616,88 @@ export async function fetchAsBase64(
     return null;
   }
 }
+
+/* --------------------- Veo ad video-clip generation (UGC) -------------------- */
+
+const AI_VIDEOS = "https://ai.gateway.lovable.dev/v1/videos";
+
+export type VeoJobState = {
+  status: "queued" | "in_progress" | "completed" | "failed" | string;
+  progress: number;
+  error: string | null;
+};
+
+/**
+ * Starts one live-action ad clip (vertical 720x1280, 8s, audio muted at render).
+ * Returns null when the gateway is rate limited / already busy so the caller can
+ * simply try again on its next poll instead of failing the run.
+ */
+export async function startAdVideoJob(opts: {
+  prompt: string;
+  seconds?: "4" | "6" | "8";
+  premium?: boolean;
+  ref?: { base64: string; mime: string } | null;
+}): Promise<string | null> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing on server");
+
+  const body: Record<string, unknown> = {
+    model: opts.premium ? "google/veo-3.1-fast" : "google/veo-3.1-lite",
+    prompt: opts.prompt,
+    seconds: opts.seconds ?? "8",
+    size: "720x1280",
+  };
+  if (opts.ref) {
+    body.input_reference = `data:${opts.ref.mime};base64,${opts.ref.base64}`;
+  }
+
+  const res = await fetch(AI_VIDEOS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 429) return null; // busy / rate limited — retry on next poll
+  if (res.status === 402) {
+    const j = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(j?.message ?? "AI credits exhausted. Add credits to continue.");
+  }
+  if (!res.ok) {
+    throw new Error(`Video gen ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  const job = (await res.json()) as { id?: string };
+  if (!job.id) throw new Error("Video generation returned no job id");
+  return job.id;
+}
+
+export async function getAdVideoJob(id: string): Promise<VeoJobState> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing on server");
+  const res = await fetch(`${AI_VIDEOS}/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    // Treat an unreadable job as failed so the caller can restart that shot.
+    return { status: "failed", progress: 0, error: `status ${res.status}` };
+  }
+  const job = (await res.json()) as {
+    status?: string;
+    progress?: number;
+    error?: { message?: string } | null;
+  };
+  return {
+    status: job.status ?? "in_progress",
+    progress: job.progress ?? 0,
+    error: job.error?.message ?? null,
+  };
+}
+
+/** Downloads the finished MP4 (the gateway URL is short-lived, so store it). */
+export async function downloadAdVideoClip(id: string): Promise<ArrayBuffer> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing on server");
+  const res = await fetch(`${AI_VIDEOS}/${encodeURIComponent(id)}/content`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`Video download ${res.status}`);
+  return await res.arrayBuffer();
+}

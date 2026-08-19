@@ -166,16 +166,20 @@ function QueuePage() {
   // done, so keep calling it until it hands back a finished (or failed) run.
   const runPipeline = useCallback(
     async (id: string) => {
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 200; i++) {
         const res = (await genScript({ data: { video_id: id } })) as {
           incomplete?: boolean;
+          retryAfterMs?: number;
         } | null;
         qc.invalidateQueries({ queryKey: ["videos"] });
         if (!res?.incomplete) return;
+        const wait = Math.min(Math.max(res.retryAfterMs ?? 0, 0), 20000);
+        if (wait) await new Promise((r) => setTimeout(r, wait));
       }
     },
     [genScript, qc],
   );
+
 
   // Watchdog: resume runs whose last progress heartbeat is stale (e.g. the tab
   // was closed mid-generation), instead of leaving them stuck forever.
