@@ -519,3 +519,68 @@ export async function getShotstackStatus(
 }
 
 
+
+/* ------------------------- Gemini ad visual generation ------------------------ */
+
+const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const IMAGE_MODEL = "google/gemini-2.5-flash-image";
+
+/**
+ * Generates a single 9:16 ad frame with Gemini. When `refImage` is provided the
+ * model edits/extends the brand's own product shot so the visual stays on-product.
+ */
+export async function generateAdVisual(
+  prompt: string,
+  refImage?: { base64: string; mime: string } | null,
+): Promise<ArrayBuffer> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing on server");
+
+  const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
+  if (refImage) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${refImage.mime};base64,${refImage.base64}` },
+    });
+  }
+
+  const res = await fetch(AI_GATEWAY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: IMAGE_MODEL,
+      messages: [{ role: "user", content }],
+      modalities: ["image", "text"],
+    }),
+  });
+  if (res.status === 429) throw new Error("Image rate limit exceeded. Please retry shortly.");
+  if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
+  if (!res.ok) throw new Error(`Image gen ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const json = (await res.json()) as {
+    choices?: Array<{
+      message?: { content?: string; images?: Array<{ image_url?: { url?: string } }> };
+    }>;
+  };
+  const url = json.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!url) throw new Error("Gemini returned no image for the ad scene");
+  const b64 = url.includes(";base64,") ? url.split(";base64,")[1] : url;
+  const bytes = Buffer.from(b64, "base64");
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+/** Downloads a media URL and returns base64 + mime for Gemini image editing. */
+export async function fetchAsBase64(
+  url: string,
+): Promise<{ base64: string; mime: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const mime = res.headers.get("content-type") ?? "image/png";
+    if (!mime.startsWith("image/")) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { base64: buf.toString("base64"), mime };
+  } catch {
+    return null;
+  }
+}
