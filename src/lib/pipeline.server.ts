@@ -647,8 +647,12 @@ export async function startAdVideoJob(opts: {
     seconds: opts.seconds ?? "8",
     size: "720x1280",
   };
-  if (opts.ref) {
-    body.input_reference = `data:${opts.ref.mime};base64,${opts.ref.base64}`;
+  // Veo accepts JPEG and PNG references only. Uploaded WebP/AVIF/GIF images
+  // remain useful in the final edit, but must not be sent as input_reference
+  // or the async job deterministically fails after creation.
+  const referenceMime = opts.ref?.mime.toLowerCase().split(";")[0];
+  if (opts.ref && (referenceMime === "image/jpeg" || referenceMime === "image/png")) {
+    body.input_reference = `data:${referenceMime};base64,${opts.ref.base64}`;
   }
 
   const res = await fetch(AI_VIDEOS, {
