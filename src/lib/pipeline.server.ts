@@ -1,20 +1,40 @@
 // Server-only helpers for the generation pipeline.
 // Never import this from route/component files. Server fns must dynamic-import it.
 
-const ELEVEN_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"; // George
+const ELEVEN_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"; // George (male)
+const ELEVEN_VOICE_FEMALE = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female)
 const VIDEO_WIDTH = 1080;
 const VIDEO_HEIGHT = 1920;
 
 type CaptionWord = { text: string; start: number; end: number };
 
+/** Picks a voice whose gender matches the on-camera character description. */
+export function voiceIdForPersona(persona: string | null | undefined): string {
+  const p = (persona ?? "").toLowerCase();
+  if (/\b(woman|female|she|her|girl|actress|lady)\b/.test(p)) return ELEVEN_VOICE_FEMALE;
+  return ELEVEN_VOICE_ID;
+}
+
+/** True when the MP4 carries an audio track (Veo dialogue) we can keep. */
+export function mp4HasAudio(bytes: ArrayBuffer): boolean {
+  const view = new Uint8Array(bytes);
+  const needles = ["mp4a", "Opus", "ac-3", "esds"];
+  const hay = new TextDecoder("latin1").decode(view.subarray(0, Math.min(view.length, 4_000_000)));
+  return needles.some((n) => hay.includes(n));
+}
+
 /* ----------------------------- ElevenLabs TTS ----------------------------- */
 
-export async function synthesizeVoiceover(text: string): Promise<ArrayBuffer> {
+export async function synthesizeVoiceover(
+  text: string,
+  voiceId: string = ELEVEN_VOICE_ID,
+): Promise<ArrayBuffer> {
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
 
   const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=mp3_44100_128`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
       method: "POST",
       headers: {
@@ -248,7 +268,14 @@ function captionStyleConfig(style: CaptionStyle) {
   }
 }
 
-export type ReferenceMedia = { url: string; type: "image" | "video" };
+export type ReferenceMedia = {
+  url: string;
+  type: "image" | "video";
+  /** Explicit scene length in seconds (AI ad clips are 8s and must not be cropped). */
+  seconds?: number;
+  /** Keep the clip's own audio track (Veo-generated on-camera dialogue). */
+  keepAudio?: boolean;
+};
 
 export type BrandRenderOpts = {
   isAd?: boolean;
@@ -261,11 +288,16 @@ export type BrandRenderOpts = {
   brandName?: string | null;
 };
 
+export type ExtraAudio = { url: string; start: number; duration: number };
+
 function buildJ2VPayload(opts: {
-  voiceoverUrl: string;
+  /** null for ads: the spoken audio lives inside the generated clips. */
+  voiceoverUrl: string | null;
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
+  /** Per-shot spoken audio for ad clips that came back without a voice track. */
+  extraAudio?: ExtraAudio[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;
@@ -275,6 +307,7 @@ function buildJ2VPayload(opts: {
     srtUrl,
     clips,
     referenceMedia = [],
+    extraAudio = [],
     duration,
     captionStyle,
     burnCaptions,
@@ -295,7 +328,7 @@ function buildJ2VPayload(opts: {
   // and the rest to stock B-roll. References open the video (hero shot) and reappear later.
   const refCount = referenceMedia.length;
   const stockCount = clips.length;
-  // With no stock b-roll (ad mode: brand media + Gemini-generated frames only),
+  // With no stock b-roll (ad mode: brand media + AI-generated clips only),
   // spread the full timeline across the available visuals so nothing goes black.
   const refDuration = refCount
     ? stockCount
@@ -308,23 +341,33 @@ function buildJ2VPayload(opts: {
 
   const zooms = [2, -2, 3, -3, 1, -1, 2, -2];
 
-  const refScene = (m: ReferenceMedia, i: number) => ({
-    duration: +refDuration.toFixed(2),
-    elements: [
-      {
-        type: m.type === "image" ? "image" : "video",
-        src: m.url,
-        duration: +refDuration.toFixed(2),
-        // Fill the full 1080x1920 frame (crop overflow) so nothing is letterboxed.
-        width: VIDEO_WIDTH,
-        height: VIDEO_HEIGHT,
-        resize: "cover",
-        position: "center-center",
-        ...(m.type === "video" ? { muted: true, loop: 1 } : {}),
-        zoom: zooms[i % zooms.length],
-      },
-    ],
-  });
+  const refScene = (m: ReferenceMedia, i: number) => {
+    // Clips that carry spoken dialogue must play at their true length, untouched
+    // and unmuted, or the performance is cut mid-sentence.
+    const d = +(m.seconds ?? refDuration).toFixed(2);
+    return {
+      duration: d,
+      elements: [
+        {
+          type: m.type === "image" ? "image" : "video",
+          src: m.url,
+          duration: d,
+          // Fill the full 1080x1920 frame (crop overflow) so nothing is letterboxed.
+          width: VIDEO_WIDTH,
+          height: VIDEO_HEIGHT,
+          resize: "cover",
+          position: "center-center",
+          ...(m.type === "video"
+            ? m.keepAudio
+              ? { muted: false }
+              : { muted: true, loop: 1 }
+            : {}),
+          ...(m.keepAudio ? {} : { zoom: zooms[i % zooms.length] }),
+        },
+      ],
+    };
+  };
+
 
   const stockScene = (c: StockClip, i: number) => ({
     duration: stockPer,
@@ -364,9 +407,24 @@ function buildJ2VPayload(opts: {
     clips.forEach((c, i) => scenes.push(stockScene(c, i)));
   }
 
-  const globalElements: Array<Record<string, unknown>> = [
-    { type: "audio", src: voiceoverUrl, start: 0, duration },
-  ];
+  // Ads have no separate narration track — each clip speaks for itself.
+  const globalElements: Array<Record<string, unknown>> = voiceoverUrl
+    ? [{ type: "audio", src: voiceoverUrl, start: 0, duration }]
+    : [];
+
+  // Safety net: a generated clip that came back silent gets its line spoken by a
+  // voice matching the on-camera character, placed exactly over that shot.
+  for (const a of extraAudio) {
+    globalElements.push({
+      type: "audio",
+      src: a.url,
+      start: +a.start.toFixed(2),
+      duration: +a.duration.toFixed(2),
+    });
+  }
+
+
+
 
   if (burnCaptions && srtUrl) {
     const settings = captionStyleConfig(captionStyle) as Record<string, unknown>;
@@ -476,10 +534,11 @@ function buildJ2VPayload(opts: {
 }
 
 export async function submitShotstackRender(opts: {
-  voiceoverUrl: string;
+  voiceoverUrl: string | null;
   srtUrl: string | null;
   clips: StockClip[];
   referenceMedia?: ReferenceMedia[];
+  extraAudio?: ExtraAudio[];
   duration: number;
   captionStyle: CaptionStyle;
   burnCaptions: boolean;

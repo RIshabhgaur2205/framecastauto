@@ -99,7 +99,7 @@ function buildPrompt(
       OBJECTIVE_BRIEFS.awareness;
     const cta = video.cta_text?.trim() || brand?.default_cta?.trim() || "Shop now";
     return {
-      system: `You are a top-performing UGC ad creative director and direct-response copywriter. You write shot-able, live-action vertical video ads (YouTube Shorts, Reels, TikTok) in the style of a real person on camera reviewing a product — not a slideshow with narration. Respond ONLY with a JSON object of the shape {"script": string, "headline": string, "cta": string}. "script" is the words actually SPOKEN ON CAMERA in ${langName}, first person, no stage directions, no labels, no markdown, no quotation marks around lines. "headline" is an on-screen hook of at most 6 words. "cta" is an end-card call to action of at most 6 words. No other keys, no prose outside the JSON.`,
+      system: `You are a top-performing UGC ad creative director and direct-response copywriter. You write shot-able, live-action vertical video ads (YouTube Shorts, Reels, TikTok) in the style of a real person on camera reviewing a product — not a slideshow with narration. Respond ONLY with a JSON object of the shape {"script": string, "headline": string, "cta": string, "persona": string, "lines": string[]}. "script" is the words actually SPOKEN ON CAMERA in ${langName}, first person, no stage directions, no labels, no markdown, no quotation marks around lines. "headline" is an on-screen hook of at most 6 words. "cta" is an end-card call to action of at most 6 words. "persona" is ONE English sentence physically describing the single on-camera character who speaks every word — gender presentation, age range, skin tone, hair, wardrobe, and voice quality (e.g. "a 27-year-old woman with long wavy dark hair, light-brown skin, wearing a cream ribbed top, warm bright mid-pitch voice") — because the same person must be filmed and heard in every shot. "lines" splits "script" into 3-6 consecutive spoken chunks, in order, each ONE short sentence of at most 22 words that a person can comfortably say in 8 seconds; concatenating "lines" must reproduce "script" with no words added or removed. No other keys, no prose outside the JSON.`,
       user: `Write a ${seconds}-second UGC-style video advertisement, performed by ONE believable on-camera character.
 
 Output language: ${langName} (script, headline, and cta must all be natively in ${langName}).
@@ -234,6 +234,35 @@ export const generateScript = createServerFn({ method: "POST" })
       const lang = ((video as { language?: string | null }).language ?? "en").toLowerCase();
       const videoStyle = ((video as { video_style?: string | null }).video_style ?? "cinematic").toLowerCase();
 
+      // Ad state (character persona, spoken lines, shot list, in-flight jobs) is
+      // cached on the row so a resumed run never re-plans or re-bills.
+      type AdState = {
+        persona?: unknown;
+        lines?: unknown;
+        shots?: unknown;
+        jobs?: Record<string, string>;
+        count?: number;
+      };
+      const adState = ((video as { ai_frames?: AdState | null }).ai_frames ?? null) as AdState | null;
+      const strings = (v: unknown): string[] =>
+        Array.isArray(v)
+          ? (v as unknown[])
+              .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+              .map((s) => s.trim())
+          : [];
+      let persona: string | null =
+        typeof adState?.persona === "string" && adState.persona.trim()
+          ? adState.persona.trim()
+          : null;
+      let adLines: string[] = strings(adState?.lines);
+
+      const mergeAdState = async (patch: Record<string, unknown>) => {
+        await supabase
+          .from("videos")
+          .update({ ai_frames: { ...(adState ?? {}), ...patch } } as never)
+          .eq("id", video.id);
+      };
+
       // 1) SCRIPT — resume if already generated
       let script = video.script_text;
       let headline = (video as { headline_text?: string | null }).headline_text ?? null;
@@ -246,17 +275,21 @@ export const generateScript = createServerFn({ method: "POST" })
         const { system, user } = buildPrompt(video, prefs as Prefs | null, brand);
         const raw = await callLLM(system, user);
         if (isAd) {
-          // Ad mode asks for JSON: { script, headline, cta }
+          // Ad mode asks for JSON: { script, headline, cta, persona, lines }
           try {
             const m = raw.match(/\{[\s\S]*\}/);
             const parsed = JSON.parse(m ? m[0] : raw) as {
               script?: string;
               headline?: string;
               cta?: string;
+              persona?: string;
+              lines?: unknown;
             };
             script = parsed.script?.trim() || raw;
             headline = parsed.headline?.trim() || headline;
             ctaText = parsed.cta?.trim() || ctaText;
+            persona = parsed.persona?.trim() || persona;
+            adLines = strings(parsed.lines).slice(0, 6);
           } catch {
             script = raw;
           }
@@ -276,7 +309,19 @@ export const generateScript = createServerFn({ method: "POST" })
               : {}),
           })
           .eq("id", video.id);
+        if (isAd && (persona || adLines.length)) {
+          await mergeAdState({ persona, lines: adLines });
+        }
       }
+
+      // Fall back to sentence chunks so older ad rows (no "lines") still work.
+      if (isAd && !adLines.length && script) {
+        adLines = (script.match(/[^.!?\n]+[.!?]?/g) ?? [script])
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 6);
+      }
+
 
 
       // Niche keyword for stock visuals
@@ -294,6 +339,9 @@ export const generateScript = createServerFn({ method: "POST" })
         getAdVideoJob,
         downloadAdVideoClip,
         fetchAsBase64,
+        mp4HasAudio,
+        voiceIdForPersona,
+
 
       } = await import("./pipeline.server");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -311,67 +359,81 @@ export const generateScript = createServerFn({ method: "POST" })
 
 
       const audioPath = `${userId}/voice/${video.id}.mp3`;
+      const srtPath = `${userId}/srt/${video.id}.srt`;
 
-      // 2) VOICEOVER — resume if mp3 already in storage
+      // Ads: one live-action clip per spoken line, each 8s, and the character's
+      // voice comes from the clip itself — no separate narration track.
+      const AD_CLIP_SECONDS = 8;
+      const adSceneCount = Math.max(2, Math.min(6, adLines.length || 3));
+
       let voiceoverUrl = video.voiceover_url as string | null;
       let audioBuf: ArrayBuffer | null = null;
-      const existingVoice = await supabaseAdmin.storage
-        .from("video-assets")
-        .download(audioPath);
-      if (existingVoice.data && voiceoverUrl) {
-        audioBuf = await existingVoice.data.arrayBuffer();
+      let durationSec = (video.duration_seconds as number | null) ?? 0;
+
+      if (isAd) {
+        // No ElevenLabs step at all: a synthetic narrator over an AI actor is
+        // exactly the mismatch we are removing.
+        voiceoverUrl = null;
+        durationSec = adSceneCount * AD_CLIP_SECONDS;
       } else {
-        await supabase
-          .from("videos")
-          .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
-          .eq("id", video.id);
-        audioBuf = await synthesizeVoiceover(script);
-        const up1 = await supabaseAdmin.storage
+        // 2) VOICEOVER — resume if mp3 already in storage
+        const existingVoice = await supabaseAdmin.storage
           .from("video-assets")
-          .upload(audioPath, audioBuf, { contentType: "audio/mpeg", upsert: true });
-        if (up1.error) throw new Error(`Voice upload: ${up1.error.message}`);
-        const signedVoice = await supabaseAdmin.storage
-          .from("video-assets")
-          .createSignedUrl(audioPath, 60 * 60 * 24);
-        if (signedVoice.error || !signedVoice.data?.signedUrl)
-          throw new Error("Could not sign voice URL");
-        voiceoverUrl = signedVoice.data.signedUrl;
-        await supabase
-          .from("videos")
-          .update({ voiceover_url: voiceoverUrl })
-          .eq("id", video.id);
+          .download(audioPath);
+        if (existingVoice.data && voiceoverUrl) {
+          audioBuf = await existingVoice.data.arrayBuffer();
+        } else {
+          await supabase
+            .from("videos")
+            .update({ status: "generating_voiceover", error_message: null, last_progress_at: new Date().toISOString() } as never)
+            .eq("id", video.id);
+          audioBuf = await synthesizeVoiceover(script);
+          const up1 = await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(audioPath, audioBuf, { contentType: "audio/mpeg", upsert: true });
+          if (up1.error) throw new Error(`Voice upload: ${up1.error.message}`);
+          const signedVoice = await supabaseAdmin.storage
+            .from("video-assets")
+            .createSignedUrl(audioPath, 60 * 60 * 24);
+          if (signedVoice.error || !signedVoice.data?.signedUrl)
+            throw new Error("Could not sign voice URL");
+          voiceoverUrl = signedVoice.data.signedUrl;
+          await supabase
+            .from("videos")
+            .update({ voiceover_url: voiceoverUrl })
+            .eq("id", video.id);
+        }
+
+        // 3) CAPTIONS — resume if already transcribed
+        const hasCaptions =
+          Array.isArray(video.captions_json) &&
+          (video.captions_json as unknown[]).length > 0 &&
+          !!video.srt_text;
+        if (!hasCaptions) {
+          await supabase
+            .from("videos")
+            .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
+            .eq("id", video.id);
+          const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
+          const srt = wordsToSrt(words);
+          await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
+              contentType: "application/x-subrip",
+              upsert: true,
+            });
+          durationSec = duration;
+          await supabase
+            .from("videos")
+            .update({
+              captions_json: words,
+              srt_text: srt,
+              duration_seconds: duration,
+            })
+            .eq("id", video.id);
+        }
       }
 
-      // 3) CAPTIONS — resume if already transcribed
-      let durationSec = (video.duration_seconds as number | null) ?? 0;
-      const srtPath = `${userId}/srt/${video.id}.srt`;
-      const hasCaptions =
-        Array.isArray(video.captions_json) &&
-        (video.captions_json as unknown[]).length > 0 &&
-        !!video.srt_text;
-      if (!hasCaptions) {
-        await supabase
-          .from("videos")
-          .update({ status: "generating_captions", error_message: null, last_progress_at: new Date().toISOString() } as never)
-          .eq("id", video.id);
-        const { words, duration } = await transcribeForCaptions(audioBuf!, lang);
-        const srt = wordsToSrt(words);
-        await supabaseAdmin.storage
-          .from("video-assets")
-          .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
-            contentType: "application/x-subrip",
-            upsert: true,
-          });
-        durationSec = duration;
-        await supabase
-          .from("videos")
-          .update({
-            captions_json: words,
-            srt_text: srt,
-            duration_seconds: duration,
-          })
-          .eq("id", video.id);
-      }
 
       const productBrief = (video as { product_description?: string | null })
         .product_description?.trim() || "";
@@ -379,7 +441,12 @@ export const generateScript = createServerFn({ method: "POST" })
       // 4a) REFERENCE MEDIA — sign storage paths so the renderer can fetch them.
       type RefMedia = { url: string; type: "image" | "video"; path?: string; name?: string };
       const refRaw = ((video as { reference_media?: unknown }).reference_media ?? []) as RefMedia[];
-      const referenceMedia: Array<{ url: string; type: "image" | "video" }> = [];
+      const referenceMedia: Array<{
+        url: string;
+        type: "image" | "video";
+        seconds?: number;
+        keepAudio?: boolean;
+      }> = [];
       for (const r of refRaw) {
         if (!r || (r.type !== "image" && r.type !== "video")) continue;
         let url = r.url;
@@ -389,8 +456,12 @@ export const generateScript = createServerFn({ method: "POST" })
             .createSignedUrl(r.path, 60 * 60 * 24);
           if (signed.data?.signedUrl) url = signed.data.signedUrl;
         }
-        if (url) referenceMedia.push({ url, type: r.type });
+        // In ads the brand's own media is a short silent opener; the spoken
+        // performance lives in the generated clips that follow.
+        if (url) referenceMedia.push({ url, type: r.type, ...(isAd ? { seconds: 2.5 } : {}) });
       }
+      const brandMediaSeconds = isAd ? referenceMedia.length * 2.5 : 0;
+
 
       // 4b) VISUALS
       //  - Ads: NO stock footage. Every shot is a live-action AI-filmed clip
@@ -399,11 +470,16 @@ export const generateScript = createServerFn({ method: "POST" })
       let stockClips = (video.stock_clips as unknown as
         | Array<{ url: string; preview: string; duration: number }>
         | null) ?? null;
+      /** How many spoken ad clips ended up on the timeline (drives duration + captions). */
+      let adClipCount = 0;
+      /** Voice overlays for ad takes that came back without on-camera audio. */
+      const adExtraAudio: Array<{ url: string; start: number; duration: number }> = [];
+
 
       if (isAd) {
         stockClips = [];
-        // One 8s live-action clip per ~8s of voiceover, capped so cost stays sane.
-        const sceneCount = Math.max(2, Math.min(6, Math.round((durationSec || 30) / 8)));
+        // One 8s live-action take per spoken line, capped so cost stays sane.
+        const sceneCount = adSceneCount;
         const aiDir = `${userId}/ai/${video.id}`;
 
         // Resume: reuse every clip already rendered, only fill the gaps.
@@ -417,32 +493,37 @@ export const generateScript = createServerFn({ method: "POST" })
         const missing: number[] = [];
         for (let i = 0; i < sceneCount; i++) if (!haveIdx.has(i)) missing.push(i);
 
-        const aiClips: Array<{ url: string; type: "video" }> = [];
+        const aiClips: Array<{
+          url: string;
+          type: "video";
+          seconds: number;
+          keepAudio: true;
+        }> = [];
         if (missing.length) {
           await progress("sourcing_visuals");
 
           // Shot list: a single believable on-camera character telling the story,
           // cached on the row so resumed runs never re-plan (or drift).
-          const cachedState = (video as {
-            ai_frames?: { shots?: unknown; jobs?: Record<string, string> } | null;
-          }).ai_frames;
-          let shots: string[] = Array.isArray(cachedState?.shots)
-            ? (cachedState!.shots as unknown[]).filter(
-                (s): s is string => typeof s === "string" && s.trim().length > 0,
-              )
-            : [];
-          const jobs: Record<string, string> = { ...(cachedState?.jobs ?? {}) };
+          let shots: string[] = strings(adState?.shots);
+          const jobs: Record<string, string> = { ...(adState?.jobs ?? {}) };
 
           const productName =
             (video as { product_name?: string | null }).product_name ??
             video.title ??
             nicheKeyword;
 
+          const personaText =
+            persona ??
+            "a 27-year-old woman with long wavy dark hair, light-brown skin, wearing a cream ribbed top, warm bright mid-pitch voice";
+
           if (!shots.length) {
             try {
               const raw = await callLLM(
-                "You are a UGC ad director. You turn a spoken ad script into a shot list for an AI video generator. Each shot is a single continuous ~8 second live-action take. Output ONLY a JSON array of strings in ENGLISH, no prose.",
-                `Spoken ad script (may be in any language):\n"""${script}"""\n\nProduct / business: ${productName}${brand?.brand_name ? ` by ${brand.brand_name}` : ""}.${productBrief ? `\nProduct brief / specs: """${productBrief}"""` : ""}${brand?.target_audience ? `\nAudience: ${brand.target_audience}` : ""}\n\nReturn exactly ${sceneCount} shot descriptions, in script order, for a UGC-style testimonial ad filmed on a modern phone camera. Rules for EVERY shot:\n- The SAME single character appears throughout. Describe that person identically in every shot (age range, gender presentation, hair, clothing) so they look continuous.\n- Shot 1: the character talking straight to camera, handheld selfie framing, delivering the hook.\n- Middle shots: the character actually using ${productName} in a real environment, plus one tight product close-up (macro, product hero) and one shot showing the result/benefit.\n- Final shot: the character back to camera recommending ${productName}.\n- Include: camera framing and movement, lens feel, location, time of day, lighting, wardrobe, and the character's expression/action.\n- Natural, documentary realism — imperfect handheld motion, real skin texture, natural light. NOT a polished studio commercial, NOT a slideshow, NOT text on screen.\n- End every string with "vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles".\n- Never invent product features beyond the brief.`,
+                "You are a UGC ad director. You turn a spoken ad script into a shot list for an AI video generator that films the actor AND records their speech. Each shot is a single continuous ~8 second live-action take in which the character speaks their line to camera. Output ONLY a JSON array of strings in ENGLISH, no prose.",
+                `Spoken ad script (may be in any language):\n"""${script}"""\n\nThe ONE on-camera character, identical in every shot: """${personaText}"""\n\nSpoken lines, one per shot, in order:\n${adLines
+                  .slice(0, sceneCount)
+                  .map((l, i) => `${i + 1}. ${l}`)
+                  .join("\n")}\n\nProduct / business: ${productName}${brand?.brand_name ? ` by ${brand.brand_name}` : ""}.${productBrief ? `\nProduct brief / specs: """${productBrief}"""` : ""}${brand?.target_audience ? `\nAudience: ${brand.target_audience}` : ""}\n\nReturn exactly ${sceneCount} shot descriptions, in script order, for a UGC-style testimonial ad filmed on a modern phone camera. Rules for EVERY shot:\n- Begin the description by restating the character exactly as given above, verbatim, so they look and sound the same in every shot.\n- The character is ON CAMERA and SPEAKING their line for that shot, with visible mouth movement and matching lip sync. Never describe an unseen narrator.\n- Shot 1: handheld selfie framing, talking straight to camera, delivering the hook.\n- Middle shots: the character speaking while actually using ${productName} in a real environment — hold the product up so it is clearly visible.\n- Final shot: back to selfie framing, recommending ${productName} to camera.\n- Include: camera framing and movement, lens feel, location, time of day, lighting, wardrobe, and the character's expression/action.\n- Audio direction in every shot: only this character's clear natural speaking voice with light room ambience — no music, no voiceover, no second speaker, no subtitles.\n- Natural, documentary realism — imperfect handheld motion, real skin texture, natural light. NOT a polished studio commercial, NOT a slideshow, NOT text on screen.\n- End every string with "vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles".\n- Never invent product features beyond the brief.`,
               );
               const match = raw.match(/\[[\s\S]*\]/);
               if (match) {
@@ -458,26 +539,27 @@ export const generateScript = createServerFn({ method: "POST" })
             }
           }
           if (!shots.length) {
-            const character =
-              "the same 28-year-old customer with shoulder-length dark hair wearing a plain grey t-shirt";
             shots = Array.from({ length: sceneCount }, (_, i) => {
               const beat =
                 i === 0
-                  ? `${character} talking straight to a handheld phone camera in a sunlit apartment, delivering an enthusiastic hook about ${productName}`
+                  ? `${personaText}, talking straight to a handheld phone camera in a sunlit apartment, delivering an enthusiastic hook about ${productName}`
                   : i === sceneCount - 1
-                    ? `${character} holding ${productName} up to the handheld phone camera and recommending it with a warm smile`
-                    : i === 1
-                      ? `macro close-up of ${productName}, slow push-in, soft window light showing material and detail`
-                      : `${character} using ${productName} in a real everyday setting, candid handheld camera following the action`;
-              return `${beat}${productBrief ? `. Product context: ${productBrief.slice(0, 240)}` : ""}. Documentary realism, imperfect handheld motion, natural light, vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles`;
+                    ? `${personaText}, holding ${productName} up to the handheld phone camera and recommending it with a warm smile`
+                    : `${personaText}, speaking to a handheld phone camera while using ${productName} in a real everyday setting, product clearly visible in frame`;
+              return `${beat}${productBrief ? `. Product context: ${productBrief.slice(0, 240)}` : ""}. Only this character's clear natural speaking voice with light room ambience, no music, no voiceover, no second speaker. Documentary realism, imperfect handheld motion, natural light, vertical 9:16, filmed on smartphone, photorealistic, natural lighting, no on-screen text, no watermark, no subtitles`;
             });
           }
 
+
           const persistState = async () =>
-            supabase
-              .from("videos")
-              .update({ ai_frames: { shots, jobs, count: sceneCount } } as never)
-              .eq("id", video.id);
+            mergeAdState({
+              persona: personaText,
+              lines: adLines,
+              shots,
+              jobs,
+              count: sceneCount,
+            });
+
           await persistState();
 
           // Seed the first shot with the brand's real product photo so the
@@ -502,8 +584,14 @@ export const generateScript = createServerFn({ method: "POST" })
           const jobId = jobs[String(idx)];
 
           if (!jobId) {
+            const line = adLines[idx] ?? adLines[adLines.length - 1] ?? "";
+            const shotPrompt = shots[idx] ?? shots[shots.length - 1];
+            // The clip must carry the speech itself: same face, same voice.
+            const prompt = line
+              ? `${shotPrompt}\n\nSpoken dialogue (the character says this out loud to camera, in ${LANG_NAMES[lang] ?? "English"}, with accurate lip sync, natural pacing, finishing within the shot): "${line}"\n\nAudio: only this character's voice — ${personaText} — plus light natural room ambience. No background music, no narrator, no second voice, no sound effects, no subtitles.`
+              : shotPrompt;
             const started = await startAdVideoJob({
-              prompt: shots[idx] ?? shots[shots.length - 1],
+              prompt,
               seconds: "8",
               premium: tier === "premium",
               ref: seed,
@@ -514,6 +602,7 @@ export const generateScript = createServerFn({ method: "POST" })
             await progress("sourcing_visuals");
             return waiting(12000);
           }
+
 
           const job = await getAdVideoJob(jobId);
           if (job.status === "failed") {
@@ -538,6 +627,24 @@ export const generateScript = createServerFn({ method: "POST" })
               upsert: true,
             });
           if (up.error) throw new Error(`Ad clip upload: ${up.error.message}`);
+
+          // Safety net: if the take came back silent, speak its line with a voice
+          // that matches the on-camera character instead of leaving a mute shot.
+          const line = adLines[idx]?.trim();
+          if (line && !mp4HasAudio(bytes)) {
+            try {
+              const mp3 = await synthesizeVoiceover(line, voiceIdForPersona(personaText));
+              await supabaseAdmin.storage
+                .from("video-assets")
+                .upload(`${aiDir}/${idx}.mp3`, mp3, {
+                  contentType: "audio/mpeg",
+                  upsert: true,
+                });
+            } catch {
+              // non-fatal: the shot simply plays without dialogue
+            }
+          }
+
           delete jobs[String(idx)];
           haveIdx.add(idx);
           await persistState();
@@ -546,13 +653,33 @@ export const generateScript = createServerFn({ method: "POST" })
           if (missing.length > 1) return waiting(1000);
         }
 
+        const listed = await supabaseAdmin.storage.from("video-assets").list(aiDir);
+        const fallbackNames = new Set((listed.data ?? []).map((f) => f.name));
+
         for (let i = 0; i < sceneCount; i++) {
           if (!haveIdx.has(i)) continue;
           const signed = await supabaseAdmin.storage
             .from("video-assets")
             .createSignedUrl(`${aiDir}/${i}.mp4`, 60 * 60 * 24);
-          if (signed.data?.signedUrl)
-            aiClips.push({ url: signed.data.signedUrl, type: "video" });
+          if (!signed.data?.signedUrl) continue;
+          const position = aiClips.length;
+          aiClips.push({
+            url: signed.data.signedUrl,
+            type: "video",
+            seconds: AD_CLIP_SECONDS,
+            keepAudio: true,
+          });
+          if (fallbackNames.has(`${i}.mp3`)) {
+            const signedAudio = await supabaseAdmin.storage
+              .from("video-assets")
+              .createSignedUrl(`${aiDir}/${i}.mp3`, 60 * 60 * 24);
+            if (signedAudio.data?.signedUrl)
+              adExtraAudio.push({
+                url: signedAudio.data.signedUrl,
+                start: brandMediaSeconds + position * AD_CLIP_SECONDS + 0.4,
+                duration: AD_CLIP_SECONDS - 0.4,
+              });
+          }
         }
 
         if (!aiClips.length && !referenceMedia.length)
@@ -560,6 +687,10 @@ export const generateScript = createServerFn({ method: "POST" })
 
         // Brand's real media opens the ad; the generated footage carries the story.
         referenceMedia.push(...aiClips);
+        adClipCount = aiClips.length;
+
+
+
       } else if (!stockClips || !stockClips.length) {
 
         await supabase
@@ -606,6 +737,66 @@ export const generateScript = createServerFn({ method: "POST" })
         logoUrl = signedLogo.data?.signedUrl ?? null;
       }
 
+      // 4d) AD CAPTIONS — the spoken audio lives inside each clip, so cue the
+      // dialogue against clip boundaries instead of transcribing a narration file.
+      if (isAd) {
+        durationSec = brandMediaSeconds + adClipCount * AD_CLIP_SECONDS;
+        const fmt = (t: number) => {
+          const ms = Math.floor((t % 1) * 1000);
+          const s = Math.floor(t) % 60;
+          const m = Math.floor(t / 60) % 60;
+          const h = Math.floor(t / 3600);
+          const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+          return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`;
+        };
+        const cues: Array<{ start: number; end: number; text: string }> = [];
+        const words: Array<{ text: string; start: number; end: number }> = [];
+        for (let i = 0; i < adClipCount; i++) {
+          const line = adLines[i]?.trim();
+          if (!line) continue;
+          const shotStart = brandMediaSeconds + i * AD_CLIP_SECONDS;
+          // Split a line into ~5-word cues spread over the take, minus a short
+          // lead-in/lead-out so text is not on screen before the words are said.
+          const tokens = line.split(/\s+/).filter(Boolean);
+          const span = AD_CLIP_SECONDS - 1.2;
+          const per = span / Math.max(tokens.length, 1);
+          tokens.forEach((t, wi) => {
+            words.push({
+              text: t,
+              start: +(shotStart + 0.5 + wi * per).toFixed(2),
+              end: +(shotStart + 0.5 + (wi + 1) * per).toFixed(2),
+            });
+          });
+          for (let c = 0; c < tokens.length; c += 5) {
+            const chunk = tokens.slice(c, c + 5);
+            cues.push({
+              start: +(shotStart + 0.5 + c * per).toFixed(2),
+              end: +(shotStart + 0.5 + (c + chunk.length) * per).toFixed(2),
+              text: chunk.join(" "),
+            });
+          }
+        }
+        const srt = cues
+          .map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`)
+          .join("\n");
+        if (srt) {
+          await supabaseAdmin.storage
+            .from("video-assets")
+            .upload(srtPath, new Blob([srt], { type: "application/x-subrip" }), {
+              contentType: "application/x-subrip",
+              upsert: true,
+            });
+        }
+        await supabase
+          .from("videos")
+          .update({
+            captions_json: words,
+            srt_text: srt || null,
+            duration_seconds: durationSec,
+          })
+          .eq("id", video.id);
+      }
+
       // 5) RENDER — submit and let the client poll
       const signedSrt = await supabaseAdmin.storage
         .from("video-assets")
@@ -616,10 +807,12 @@ export const generateScript = createServerFn({ method: "POST" })
       const burnCaptions = tier !== "premium";
 
       const renderId = await submitShotstackRender({
-        voiceoverUrl: voiceoverUrl!,
+        voiceoverUrl,
+
         srtUrl,
         clips: stockClips!,
         referenceMedia,
+        extraAudio: adExtraAudio,
         duration: durationSec || 30,
         captionStyle: (captionStyle as "bold" | "minimal" | "neon" | "subtle") ?? "bold",
         burnCaptions,
