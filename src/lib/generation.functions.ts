@@ -627,6 +627,24 @@ export const generateScript = createServerFn({ method: "POST" })
               upsert: true,
             });
           if (up.error) throw new Error(`Ad clip upload: ${up.error.message}`);
+
+          // Safety net: if the take came back silent, speak its line with a voice
+          // that matches the on-camera character instead of leaving a mute shot.
+          const line = adLines[idx]?.trim();
+          if (line && !mp4HasAudio(bytes)) {
+            try {
+              const mp3 = await synthesizeVoiceover(line, voiceIdForPersona(personaText));
+              await supabaseAdmin.storage
+                .from("video-assets")
+                .upload(`${aiDir}/${idx}.mp3`, mp3, {
+                  contentType: "audio/mpeg",
+                  upsert: true,
+                });
+            } catch {
+              // non-fatal: the shot simply plays without dialogue
+            }
+          }
+
           delete jobs[String(idx)];
           haveIdx.add(idx);
           await persistState();
@@ -635,18 +653,33 @@ export const generateScript = createServerFn({ method: "POST" })
           if (missing.length > 1) return waiting(1000);
         }
 
+        const listed = await supabaseAdmin.storage.from("video-assets").list(aiDir);
+        const fallbackNames = new Set((listed.data ?? []).map((f) => f.name));
+
         for (let i = 0; i < sceneCount; i++) {
           if (!haveIdx.has(i)) continue;
           const signed = await supabaseAdmin.storage
             .from("video-assets")
             .createSignedUrl(`${aiDir}/${i}.mp4`, 60 * 60 * 24);
-          if (signed.data?.signedUrl)
-            aiClips.push({
-              url: signed.data.signedUrl,
-              type: "video",
-              seconds: AD_CLIP_SECONDS,
-              keepAudio: true,
-            });
+          if (!signed.data?.signedUrl) continue;
+          const position = aiClips.length;
+          aiClips.push({
+            url: signed.data.signedUrl,
+            type: "video",
+            seconds: AD_CLIP_SECONDS,
+            keepAudio: true,
+          });
+          if (fallbackNames.has(`${i}.mp3`)) {
+            const signedAudio = await supabaseAdmin.storage
+              .from("video-assets")
+              .createSignedUrl(`${aiDir}/${i}.mp3`, 60 * 60 * 24);
+            if (signedAudio.data?.signedUrl)
+              adExtraAudio.push({
+                url: signedAudio.data.signedUrl,
+                start: brandMediaSeconds + position * AD_CLIP_SECONDS + 0.4,
+                duration: AD_CLIP_SECONDS - 0.4,
+              });
+          }
         }
 
         if (!aiClips.length && !referenceMedia.length)
@@ -655,6 +688,8 @@ export const generateScript = createServerFn({ method: "POST" })
         // Brand's real media opens the ad; the generated footage carries the story.
         referenceMedia.push(...aiClips);
         adClipCount = aiClips.length;
+
+
 
       } else if (!stockClips || !stockClips.length) {
 
